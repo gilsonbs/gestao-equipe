@@ -379,6 +379,10 @@ const anoAtual = now.getFullYear();
     return dias;
   }
 
+  function primeiroNome(nome: string) {
+    return nome.trim().split(/\s+/)[0];
+  }
+
   function montarCalendario(folgas: any[], mes: number, ano: number) {
     const diasNoMes = new Date(ano, mes, 0).getDate();
     const vaziosNoInicio = new Date(ano, mes - 1, 1).getDay(); // 0 = domingo
@@ -416,26 +420,42 @@ const anoAtual = now.getFullYear();
       // Até 3 marcadores por dia; acima disso o "+N" evita estourar a célula
       const visiveis = gente.slice(0, 3);
       const extras = gente.length - visiveis.length;
+
       const pontos = visiveis
         .map(g => `<span class="cal-ponto ${g.tipo}"></span>`).join('') +
         (extras > 0 ? `<span class="cal-mais">+${extras}</span>` : '');
+
+      // Só o primeiro nome: é o que cabe na célula e basta para
+      // identificar alguém numa equipe deste tamanho. O nome completo
+      // fica no title e na lista abaixo da grade.
+      const nomes = visiveis.map(g =>
+        `<span class="cal-nome ${g.tipo}" title="${escapeHtml(g.nome)}">${escapeHtml(primeiroNome(g.nome))}</span>`
+      ).join('') + (extras > 0 ? `<span class="cal-nome mais">+${extras}</span>` : '');
 
       const titulo = gente.length
         ? `${dia}: ${gente.map(g => `${g.nome} (${g.tipo === 'ferias' ? 'férias' : 'folga'})`).join(', ')}`
         : String(dia);
 
+      // As duas formas são geradas sempre; o CSS escolhe qual mostrar
+      // conforme a largura da tela.
       return `<div class="${classes.join(' ')}" title="${escapeHtml(titulo)}">
         <span class="cal-num">${dia}</span>
         <span class="cal-pontos">${pontos}</span>
+        <span class="cal-nomes">${nomes}</span>
       </div>`;
     }).join('');
 
-    return `<div class="cal" role="grid" aria-label="Calendário de folgas e férias">
-        ${cabecalho}${vazias}${celulas}
-      </div>
-      <div class="cal-legenda">
-        <span><span class="cal-ponto folga"></span> Folga</span>
-        <span><span class="cal-ponto ferias"></span> Férias</span>
+    // O wrapper é o elemento medido pela container query do CSS: o que
+    // decide entre nomes e bolinhas é a largura do card, não a da
+    // janela — o card muda de largura conforme a grade da página.
+    return `<div class="cal-wrap">
+        <div class="cal" role="grid" aria-label="Calendário de folgas e férias">
+          ${cabecalho}${vazias}${celulas}
+        </div>
+        <div class="cal-legenda">
+          <span><span class="cal-ponto folga"></span> Folga</span>
+          <span><span class="cal-ponto ferias"></span> Férias</span>
+        </div>
       </div>`;
   }
 

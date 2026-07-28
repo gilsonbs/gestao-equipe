@@ -488,6 +488,12 @@ tbody tr:hover td { background: var(--slate-50); }
    de avisos acima.
    ========================================================= */
 
+/* A escolha entre nomes e bolinhas depende da largura DO CARD, não da
+   janela: o card ocupa a linha inteira em telas médias e só metade
+   quando a grade da página vira duas colunas, então a mesma janela
+   pode dar células largas ou estreitas. */
+.cal-wrap { container-type: inline-size; }
+
 .cal {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -505,13 +511,15 @@ tbody tr:hover td { background: var(--slate-50); }
 }
 
 .cal-dia {
-  /* Quadrada: mantém a grade estável em qualquer largura de tela */
+  /* Padrão compacto: célula quadrada com bolinhas. A versão com nomes
+     entra na container query, quando o card é largo o bastante. */
   aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
+  padding: 3px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -520,6 +528,46 @@ tbody tr:hover td { background: var(--slate-50); }
 .cal-dia.vazia { border: none; background: transparent; }
 
 .cal-num { font-size: .8rem; font-weight: 550; color: var(--slate-600); line-height: 1; }
+
+/* ---- Nomes dentro do dia ---- */
+.cal-nomes {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cal-nome {
+  font-size: .65rem;
+  font-weight: 550;
+  line-height: 1.3;
+  padding: 1px 4px;
+  border-radius: 3px;
+  /* Nome comprido é cortado com reticências em vez de alargar a coluna */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.cal-nome.folga  { background: var(--warning-soft); color: var(--warning); }
+.cal-nome.ferias { background: var(--info-soft);    color: var(--info); }
+.cal-nome.mais   { color: var(--text-muted); font-weight: 600; padding-left: 2px; }
+
+/* 480px de card ÷ 7 colunas ≈ 65px por célula. Medido: um primeiro
+   nome comum a .65rem ocupa ~40px com o respiro do chip, então 65px
+   comporta a maioria sem cortar. Abaixo disso vira reticências e as
+   bolinhas informam mais. */
+@container (min-width: 480px) {
+  .cal-dia {
+    aspect-ratio: auto;
+    min-height: 4.75rem;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+  .cal-nomes { display: flex; }
+  .cal-pontos { display: none; }
+}
 
 .cal-dia.ocupado { border-color: var(--slate-300); }
 .cal-dia.tem-folga  { background: var(--warning-soft); }
@@ -536,6 +584,8 @@ tbody tr:hover td { background: var(--slate-50); }
 }
 .cal-dia.hoje .cal-num { color: var(--accent); font-weight: 700; }
 
+/* Bolinhas: a forma compacta, padrão. A container query acima troca
+   para os nomes quando há espaço. */
 .cal-pontos {
   display: flex;
   align-items: center;
