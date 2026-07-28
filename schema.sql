@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS vendas_funcionario (
   UNIQUE(funcionario_id, mes, ano)
 );
 
+-- Meta mensal de faturamento da loja
+CREATE TABLE IF NOT EXISTS metas_loja (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  mes integer NOT NULL CHECK (mes BETWEEN 1 AND 12),
+  ano integer NOT NULL CHECK (ano >= 2020),
+  valor_meta numeric(12,2) NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(mes, ano)
+);
+
 -- Vendas totais da loja
 CREATE TABLE IF NOT EXISTS vendas_loja (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -120,6 +130,35 @@ JOIN funcionarios f
 GRANT SELECT ON desempenho_mensal TO anon, authenticated;
 
 -- =============================================
+-- View de desempenho da loja: meta do mês contra o total vendido.
+--
+-- vendas_loja não tem UNIQUE(mes, ano) — pode haver mais de um
+-- lançamento no mesmo mês —, então o realizado é a SOMA do período.
+-- =============================================
+CREATE OR REPLACE VIEW desempenho_loja
+WITH (security_invoker = on) AS
+WITH vendas AS (
+  SELECT mes, ano, SUM(valor_total)::numeric(12,2) AS total
+  FROM vendas_loja
+  GROUP BY mes, ano
+)
+SELECT
+  COALESCE(m.mes, v.mes)                   AS mes,
+  COALESCE(m.ano, v.ano)                   AS ano,
+  COALESCE(m.valor_meta, 0)::numeric(12,2) AS valor_meta,
+  COALESCE(v.total, 0)::numeric(12,2)      AS valor_realizado,
+  CASE
+    WHEN COALESCE(m.valor_meta, 0) > 0
+      THEN ROUND((COALESCE(v.total, 0) / m.valor_meta) * 100)
+    ELSE NULL
+  END                                      AS percentual
+FROM metas_loja m
+FULL OUTER JOIN vendas v
+  ON m.mes = v.mes AND m.ano = v.ano;
+
+GRANT SELECT ON desempenho_loja TO anon, authenticated;
+
+-- =============================================
 -- View de avisos: marca quais ainda estão vigentes, para que o
 -- dashboard e o admin usem exatamente a mesma regra de expiração.
 -- =============================================
@@ -139,6 +178,7 @@ GRANT SELECT ON avisos_com_status TO anon, authenticated;
 ALTER TABLE funcionarios        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metas               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vendas_funcionario  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metas_loja          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vendas_loja         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE folgas              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE produtos_top        ENABLE ROW LEVEL SECURITY;
@@ -148,6 +188,7 @@ ALTER TABLE avisos              ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Leitura pública - funcionarios"       ON funcionarios       FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - metas"              ON metas              FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - vendas_funcionario" ON vendas_funcionario FOR SELECT USING (true);
+CREATE POLICY "Leitura pública - metas_loja"         ON metas_loja         FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - vendas_loja"        ON vendas_loja        FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - folgas"             ON folgas             FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - produtos_top"       ON produtos_top       FOR SELECT USING (true);
@@ -163,6 +204,9 @@ CREATE POLICY "Admin - metas" ON metas
   FOR ALL USING ((select auth.role()) = 'authenticated')
   WITH CHECK ((select auth.role()) = 'authenticated');
 CREATE POLICY "Admin - vendas_funcionario" ON vendas_funcionario
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
+CREATE POLICY "Admin - metas_loja" ON metas_loja
   FOR ALL USING ((select auth.role()) = 'authenticated')
   WITH CHECK ((select auth.role()) = 'authenticated');
 CREATE POLICY "Admin - vendas_loja" ON vendas_loja
@@ -183,6 +227,7 @@ CREATE POLICY "Admin - avisos" ON avisos
 -- =============================================
 CREATE INDEX IF NOT EXISTS idx_metas_mes_ano              ON metas(mes, ano);
 CREATE INDEX IF NOT EXISTS idx_vendas_funcionario_mes_ano ON vendas_funcionario(mes, ano);
+CREATE INDEX IF NOT EXISTS idx_metas_loja_mes_ano         ON metas_loja(mes, ano);
 CREATE INDEX IF NOT EXISTS idx_vendas_loja_mes_ano        ON vendas_loja(mes, ano);
 CREATE INDEX IF NOT EXISTS idx_folgas_data_inicio         ON folgas(data_inicio);
 CREATE INDEX IF NOT EXISTS idx_produtos_top_nome          ON produtos_top(nome);

@@ -49,6 +49,24 @@ export type DesempenhoMensal = {
   percentual: number | null;
 };
 
+export type MetaLoja = {
+  id: string;
+  mes: number;
+  ano: number;
+  valor_meta: number;
+};
+
+/** Linha da view `desempenho_loja` (meta da loja + total vendido no mês). */
+export type DesempenhoLoja = {
+  mes: number;
+  ano: number;
+  valor_meta: number;
+  /** Soma de todos os lançamentos de vendas_loja no período. */
+  valor_realizado: number;
+  /** NULL quando não há meta definida para o mês. */
+  percentual: number | null;
+};
+
 export type VendaLoja = {
   id: string;
   mes: number;

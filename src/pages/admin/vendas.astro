@@ -22,6 +22,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </div>
   </div>
 
+  <!-- Meta da Loja -->
+  <div class="card" style="margin-bottom:var(--sp-4)">
+    <div class="card-header">
+      <span class="card-title">🎯 Meta da Loja</span>
+      <button class="btn btn-primary btn-sm" id="btn-meta-loja">Definir meta</button>
+    </div>
+    <div class="card-body" id="meta-loja-body">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+
   <div class="grid-2" style="margin-bottom:1.5rem">
     <!-- Vendas por Funcionário -->
     <div class="card">
@@ -111,6 +122,28 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       </div>
     </div>
   </div>
+
+  <!-- Modal Meta da Loja -->
+  <div class="modal-backdrop" id="modal-meta" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-meta-title">Meta da Loja</span>
+        <button class="modal-close" onclick="closeModalMeta()" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="ml-valor">Meta de faturamento (R$) *</label>
+          <input class="form-control" type="number" id="ml-valor" min="0" step="0.01" placeholder="0,00" />
+          <p class="form-hint" id="ml-periodo"></p>
+        </div>
+        <div id="ml-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-4);margin-bottom:0"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModalMeta()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save-meta">Salvar</button>
+      </div>
+    </div>
+  </div>
 </AdminLayout>
 
 <script>
@@ -188,7 +221,102 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     `).join('');
   }
 
-  function load() { loadVendasFunc(); loadVendasLoja(); }
+  function load() { loadVendasFunc(); loadVendasLoja(); loadMetaLoja(); }
+
+  // ===== META DA LOJA =====
+  const MESES_NOME = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  const brl = (v: number) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+  async function loadMetaLoja() {
+    const { mes, ano } = getMesAno();
+    const body = document.getElementById('meta-loja-body')!;
+
+    const { data, error } = await supabase
+      .from('desempenho_loja')
+      .select('*')
+      .eq('mes', mes).eq('ano', ano)
+      .maybeSingle();
+
+    if (error) {
+      body.innerHTML = `<div class="alert alert-danger" style="margin:0">Erro ao carregar a meta: ${error.message}</div>`;
+      return;
+    }
+
+    const meta = Number(data?.valor_meta ?? 0);
+    const realizado = Number(data?.valor_realizado ?? 0);
+
+    if (meta <= 0) {
+      body.innerHTML = `<div class="empty" style="padding:var(--sp-5) var(--sp-4)">
+        <div class="empty-icon">🎯</div>
+        Nenhuma meta definida para ${MESES_NOME[mes]} de ${ano}
+      </div>`;
+      return;
+    }
+
+    const pct = Number(data?.percentual ?? 0);
+    const cls = pct >= 100 ? 'success' : pct >= 70 ? 'warning' : 'danger';
+    const cor = pct >= 100 ? 'var(--success)' : pct >= 70 ? 'var(--warning)' : 'var(--danger)';
+    const falta = meta - realizado;
+
+    body.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-2)">
+        <div>
+          <span style="font-size:1.5rem;font-weight:700;letter-spacing:-.02em">${brl(realizado)}</span>
+          <span style="color:var(--text-muted);font-size:.9rem"> de ${brl(meta)}</span>
+        </div>
+        <span style="font-size:1.25rem;font-weight:700;color:${cor}">${pct}%</span>
+      </div>
+      <div class="progress"><div class="progress-bar ${cls}" style="width:${Math.min(pct, 100)}%"></div></div>
+      <p style="font-size:.8rem;color:var(--text-muted);margin-top:var(--sp-2)">
+        ${falta > 0
+          ? `Faltam ${brl(falta)} para bater a meta de ${MESES_NOME[mes]}.`
+          : `Meta batida com ${brl(-falta)} de excedente. 🎉`}
+      </p>`;
+  }
+
+  (window as any).closeModalMeta = () => {
+    document.getElementById('modal-meta')!.style.display = 'none';
+    document.getElementById('ml-error')!.style.display = 'none';
+  };
+
+  document.getElementById('btn-meta-loja')?.addEventListener('click', async () => {
+    const { mes, ano } = getMesAno();
+    document.getElementById('ml-periodo')!.textContent =
+      `Meta para ${MESES_NOME[mes]} de ${ano}. Trocar o período acima muda o mês editado.`;
+    const { data } = await supabase
+      .from('metas_loja').select('valor_meta').eq('mes', mes).eq('ano', ano).maybeSingle();
+    (document.getElementById('ml-valor') as HTMLInputElement).value = data ? String(data.valor_meta) : '';
+    document.getElementById('modal-meta')!.style.display = 'flex';
+  });
+
+  document.getElementById('btn-save-meta')?.addEventListener('click', async () => {
+    const { mes, ano } = getMesAno();
+    const valor_meta = parseFloat((document.getElementById('ml-valor') as HTMLInputElement).value);
+    const errorDiv = document.getElementById('ml-error')!;
+
+    if (isNaN(valor_meta) || valor_meta < 0) {
+      errorDiv.textContent = 'Informe um valor válido para a meta.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    errorDiv.style.display = 'none';
+
+    // UNIQUE(mes, ano) permite upsert: redefinir a meta do mesmo mês
+    // sobrescreve em vez de falhar.
+    const { error } = await supabase
+      .from('metas_loja')
+      .upsert({ mes, ano, valor_meta }, { onConflict: 'mes,ano' });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar a meta: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
+    }
+    (window as any).closeModalMeta();
+    loadMetaLoja();
+  });
 
   // Modal Funcionário
   (window as any).closeModalFunc = () => {

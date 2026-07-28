@@ -130,6 +130,7 @@ A partir daí, todo push na `main` dispara build e publicação.
 | `funcionarios` | Nome, cargo, data de nascimento, ativo/inativo |
 | `metas` | Meta mensal pactuada por funcionário |
 | `vendas_funcionario` | Valor efetivamente vendido por funcionário no mês |
+| `metas_loja` | Meta mensal de faturamento da loja |
 | `vendas_loja` | Faturamento total da loja no mês |
 | `folgas` | Folgas e férias, com data de início e fim |
 | `produtos_top` | Produtos mais vendidos, com substância e categoria |
@@ -143,6 +144,15 @@ entra no cálculo da média do dashboard.
 Tanto `metas` quanto `vendas_funcionario` têm
 `UNIQUE(funcionario_id, mes, ano)`: existe no máximo um registro de cada por
 funcionário por mês.
+
+A meta da loja segue a mesma separação: `metas_loja` guarda o valor pactuado
+para o mês e `vendas_loja` o faturamento lançado. A view `desempenho_loja`
+junta os dois e calcula o atingimento, que aparece no primeiro indicador do
+dashboard. Como `vendas_loja` aceita mais de um lançamento por mês, o
+realizado é a **soma** dos registros do período.
+
+Ao contrário das metas por funcionário, `metas_loja` tem `UNIQUE(mes, ano)`:
+existe uma única meta de loja por mês, e redefini-la sobrescreve a anterior.
 
 ## Avisos
 

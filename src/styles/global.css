@@ -297,6 +297,8 @@ tbody tr:hover td { background: var(--slate-50); }
   overflow-wrap: anywhere;
 }
 .stat-sub { font-size: .8rem; color: var(--text-muted); }
+.loja-progresso { margin: var(--sp-2) 0 var(--sp-2); }
+.loja-progresso[hidden] { display: none; }
 
 /* ---------- Carregando / vazio ---------- */
 .loading {

@@ -53,7 +53,10 @@ const anoAtual = now.getFullYear();
     <div class="stat-card" id="stat-vendas-loja">
       <div class="stat-label">Vendas da Loja</div>
       <div class="stat-value loading-val">—</div>
-      <div class="stat-sub">este mês</div>
+      <div class="loja-progresso" hidden>
+        <div class="progress"><div class="progress-bar" id="loja-barra" style="width:0%"></div></div>
+      </div>
+      <div class="stat-sub" id="loja-sub">este mês</div>
     </div>
     <div class="stat-card" id="stat-total-metas">
       <div class="stat-label">Funcionários com Meta</div>
@@ -188,15 +191,32 @@ const anoAtual = now.getFullYear();
     const mes = getMes(); const ano = getAno();
     const { inicio, fim } = intervaloDoMes(mes, ano);
     const [lojaRes, desempenhoRes, folgasRes] = await Promise.all([
-      supabase.from('vendas_loja').select('valor_total').eq('mes', mes).eq('ano', ano),
+      supabase.from('desempenho_loja').select('*').eq('mes', mes).eq('ano', ano).maybeSingle(),
       supabase.from('desempenho_mensal').select('valor_meta, percentual').eq('mes', mes).eq('ano', ano),
       supabase.from('folgas').select('id', { count: 'exact', head: true })
         .gte('data_inicio', inicio).lte('data_inicio', fim),
     ]);
 
-    const totalLoja = (lojaRes.data ?? []).reduce((s: number, v: any) => s + Number(v.valor_total), 0);
+    const totalLoja = Number(lojaRes.data?.valor_realizado ?? 0);
+    const metaLoja = Number(lojaRes.data?.valor_meta ?? 0);
     document.getElementById('stat-vendas-loja')!.querySelector('.stat-value')!.textContent =
-      totalLoja > 0 ? `R$ ${totalLoja.toLocaleString('pt-BR', {minimumFractionDigits:2})}` : 'R$ 0,00';
+      `R$ ${totalLoja.toLocaleString('pt-BR', {minimumFractionDigits:2})}`;
+
+    // A barra só aparece quando há meta definida — sem meta, não há
+    // progresso a mostrar, e o card volta a ser só o valor do mês.
+    const progressoEl = document.querySelector('.loja-progresso') as HTMLElement;
+    const subEl = document.getElementById('loja-sub')!;
+    if (metaLoja > 0) {
+      const pctLoja = Number(lojaRes.data?.percentual ?? 0);
+      const barra = document.getElementById('loja-barra') as HTMLElement;
+      barra.style.width = `${Math.min(pctLoja, 100)}%`;
+      barra.className = 'progress-bar ' + (pctLoja >= 100 ? 'success' : pctLoja >= 70 ? 'warning' : 'danger');
+      progressoEl.hidden = false;
+      subEl.textContent = `${pctLoja}% da meta de R$ ${metaLoja.toLocaleString('pt-BR', {minimumFractionDigits:2})}`;
+    } else {
+      progressoEl.hidden = true;
+      subEl.textContent = 'este mês';
+    }
 
     const linhas = desempenhoRes.data ?? [];
     const comMeta = linhas.filter((d: any) => Number(d.valor_meta) > 0);
