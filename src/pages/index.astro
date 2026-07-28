@@ -20,27 +20,33 @@ const anoAtual = now.getFullYear();
   <div class="top-bar-inner">
     <div class="brand">
       <span class="brand-icon">💊</span>
-      <div>
+      <div class="brand-text">
         <div class="brand-title">Gestão de Equipe</div>
-        <div class="brand-sub">Dashboard Interno</div>
+        <div class="brand-sub">Painel da equipe</div>
       </div>
     </div>
-    <div class="header-right">
-      <div class="month-selector">
-        <select id="sel-mes" class="form-control" style="display:inline-block;width:auto">
-          {MESES.slice(1).map((m, i) => (
-            <option value={i + 1} selected={i + 1 === mesAtual}>{m}</option>
-          ))}
-        </select>
-        <input type="number" id="sel-ano" class="form-control" value={anoAtual}
-          style="display:inline-block;width:90px" min="2020" max="2100" />
-      </div>
-      <a href={`${base}admin/`} class="btn btn-ghost btn-sm">⚙️ Admin</a>
+    <a href={`${base}admin/`} class="btn btn-sm admin-link">⚙️ <span>Admin</span></a>
+  </div>
+  <div class="top-bar-period">
+    <label class="period-label" for="sel-mes">Período</label>
+    <div class="period-controls">
+      <select id="sel-mes" class="form-control">
+        {MESES.slice(1).map((m, i) => (
+          <option value={i + 1} selected={i + 1 === mesAtual}>{m}</option>
+        ))}
+      </select>
+      <input type="number" id="sel-ano" class="form-control" value={anoAtual}
+        min="2020" max="2100" aria-label="Ano" />
     </div>
   </div>
 </header>
 
 <main class="dashboard">
+
+  <!-- Avisos ativos -->
+  <section class="section" id="avisos-section" hidden>
+    <div id="avisos-list" class="avisos-list"></div>
+  </section>
 
   <!-- Stats Row -->
   <section class="grid-4 section" id="stats-row">
@@ -121,9 +127,9 @@ const anoAtual = now.getFullYear();
   <section class="card section">
     <div class="card-header">
       <span class="card-title">💊 Top Produtos</span>
-      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-        <input class="form-control" id="busca-prod" placeholder="🔍 Nome ou substância..." style="width:220px" />
-        <select class="form-control" id="prod-mes" style="width:auto">
+      <div class="prod-filtros">
+        <input class="form-control" id="busca-prod" placeholder="🔍 Nome ou substância..." />
+        <select class="form-control" id="prod-mes">
           <option value="">Todos os meses</option>
           {MESES.slice(1).map((m, i) => (
             <option value={i + 1}>{m}</option>
@@ -131,19 +137,45 @@ const anoAtual = now.getFullYear();
         </select>
       </div>
     </div>
-    <div class="card-body" id="produtos-body">
+    <div class="card-body" id="produtos-body" style="padding:0">
       <div class="loading"><div class="spinner"></div> Carregando...</div>
     </div>
+  </section>
+
+  <!-- Histórico de avisos -->
+  <section class="card section">
+    <details id="hist-details">
+      <summary class="hist-summary">
+        <span class="card-title">🗂️ Histórico de avisos</span>
+        <span class="hist-meta"><span id="hist-count">—</span> <span class="hist-chevron">▾</span></span>
+      </summary>
+      <div class="card-body" id="historico-body">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </details>
   </section>
 
 </main>
 
 <script>
   import { supabase } from '../lib/supabase';
-  import { intervaloDoMes } from '../lib/dates';
+  import { intervaloDoMes, formatarData } from '../lib/dates';
 
   const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const MESES_SHORT = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  /* Os avisos são escritos por pessoas e vão para innerHTML — escapar
+     é o que impede que um "<" no texto quebre ou injete marcação. */
+  function escapeHtml(s: string) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
+  const TIPOS_AVISO: Record<string, { classe: string; icone: string; rotulo: string }> = {
+    info:    { classe: 'aviso-info',    icone: 'ℹ️', rotulo: 'Informativo' },
+    atencao: { classe: 'aviso-atencao', icone: '⚠️', rotulo: 'Atenção' },
+    urgente: { classe: 'aviso-urgente', icone: '🚨', rotulo: 'Urgente' },
+  };
 
   const selMes = document.getElementById('sel-mes') as HTMLSelectElement;
   const selAno = document.getElementById('sel-ano') as HTMLInputElement;
@@ -178,7 +210,7 @@ const anoAtual = now.getFullYear();
       : 0;
     const mediaEl = document.getElementById('stat-media-metas')!.querySelector('.stat-value') as HTMLElement;
     mediaEl.textContent = comPercentual.length > 0 ? `${media}%` : '—';
-    mediaEl.style.color = media >= 100 ? 'var(--color-success)' : media >= 70 ? 'var(--color-warning)' : 'var(--color-danger)';
+    mediaEl.style.color = media >= 100 ? 'var(--success)' : media >= 70 ? 'var(--warning)' : 'var(--danger)';
 
     document.getElementById('stat-folgas')!.querySelector('.stat-value')!.textContent =
       String(folgasRes.count ?? 0);
@@ -204,7 +236,7 @@ const anoAtual = now.getFullYear();
       const pctReal = Number(m.percentual ?? 0);
       const pct = Math.min(pctReal, 100);
       const cls = pctReal >= 100 ? 'success' : pctReal >= 70 ? 'warning' : 'danger';
-      const color = pctReal >= 100 ? 'var(--color-success)' : pctReal >= 70 ? 'var(--color-warning)' : 'var(--color-danger)';
+      const color = pctReal >= 100 ? 'var(--success)' : pctReal >= 70 ? 'var(--warning)' : 'var(--danger)';
       return `<div style="margin-bottom:1rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
           <div>
@@ -251,7 +283,7 @@ const anoAtual = now.getFullYear();
       return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid #e2e8f0">
         <div style="font-size:1.5rem;min-width:2rem;text-align:center">${isToday ? '🎉' : isPast ? '🎂' : '🎂'}</div>
         <div style="flex:1">
-          <div style="font-weight:600${isToday ? ';color:var(--color-success)' : ''}">${f.nome}${isToday ? ' — Hoje! 🎉' : ''}</div>
+          <div style="font-weight:600${isToday ? ';color:var(--success)' : ''}">${f.nome}${isToday ? ' — Hoje! 🎉' : ''}</div>
           <div style="font-size:.75rem;color:#64748b">${f.cargo ?? ''} · Dia ${day}</div>
         </div>
         ${isToday ? '<span class="badge badge-success">Hoje</span>' : ''}
@@ -330,7 +362,7 @@ const anoAtual = now.getFullYear();
     const maxVal = Math.max(...data.map((v: any) => Number(v.valor)));
     body.innerHTML = data.map((v: any, i: number) => {
       const pct = maxVal > 0 ? Math.round((v.valor / maxVal) * 100) : 0;
-      const colors = ['var(--color-primary)','var(--color-secondary)','#7c3aed','#dc2626','#d97706'];
+      const colors = ['var(--accent)','var(--slate-700)','#7c3aed','#dc2626','#d97706'];
       const color = colors[i % colors.length];
       return `<div style="margin-bottom:.75rem">
         <div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
@@ -368,21 +400,89 @@ const anoAtual = now.getFullYear();
       return;
     }
 
-    body.innerHTML = `<div class="table-wrap"><table>
+    body.innerHTML = `<div class="table-wrap"><table class="table-cards">
       <thead><tr><th>#</th><th>Nome</th><th>Substância</th><th>Categoria</th><th>Quantidade</th><th>Período</th></tr></thead>
       <tbody>
         ${filtered.slice(0, 50).map((p, i) => `
           <tr>
-            <td><strong>#${i+1}</strong></td>
-            <td><strong>${p.nome}</strong></td>
-            <td>${p.substancia ?? '—'}</td>
-            <td>${p.categoria ? `<span class="badge badge-info">${p.categoria}</span>` : '—'}</td>
-            <td>${p.quantidade ?? '—'}</td>
-            <td>${p.mes ? `${MESES_SHORT[p.mes]}/${p.ano}` : '—'}</td>
+            <td data-label="Posição"><strong>#${i+1}</strong></td>
+            <td data-label="Nome"><strong>${p.nome}</strong></td>
+            <td data-label="Substância">${p.substancia ?? '—'}</td>
+            <td data-label="Categoria">${p.categoria ? `<span class="badge badge-info">${p.categoria}</span>` : '—'}</td>
+            <td data-label="Quantidade">${p.quantidade ?? '—'}</td>
+            <td data-label="Período">${p.mes ? `${MESES_SHORT[p.mes]}/${p.ano}` : '—'}</td>
           </tr>
         `).join('')}
       </tbody>
     </table></div>`;
+  }
+
+  // ===== AVISOS =====
+  async function loadAvisos() {
+    const { data, error } = await supabase
+      .from('avisos_com_status')
+      .select('*')
+      .order('fixado', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    const section = document.getElementById('avisos-section')!;
+    const lista = document.getElementById('avisos-list')!;
+    const histBody = document.getElementById('historico-body')!;
+    const histCount = document.getElementById('hist-count')!;
+
+    if (error) {
+      section.hidden = false;
+      lista.innerHTML = `<div class="alert alert-danger">Não foi possível carregar os avisos: ${escapeHtml(error.message)}</div>`;
+      histBody.innerHTML = '';
+      histCount.textContent = '';
+      return;
+    }
+
+    const todos = data ?? [];
+    const ativos = todos.filter((a: any) => a.ativo);
+    const expirados = todos.filter((a: any) => !a.ativo);
+
+    // Sem avisos ativos a seção some por completo, em vez de ocupar
+    // espaço no alto da tela com um card vazio.
+    section.hidden = ativos.length === 0;
+    lista.innerHTML = ativos.map((a: any) => {
+      const t = TIPOS_AVISO[a.tipo] ?? TIPOS_AVISO.info;
+      return `<article class="aviso ${t.classe}">
+        <div class="aviso-icone" aria-hidden="true">${t.icone}</div>
+        <div class="aviso-corpo">
+          <div class="aviso-topo">
+            <h3 class="aviso-titulo">${a.fixado ? '<span class="aviso-pin" title="Fixado">📌</span>' : ''}${escapeHtml(a.titulo)}</h3>
+            <span class="aviso-tipo">${t.rotulo}</span>
+          </div>
+          <p class="aviso-msg">${escapeHtml(a.mensagem)}</p>
+          <div class="aviso-rodape">
+            <span>${formatarData(String(a.created_at).slice(0, 10))}</span>
+            ${a.data_expiracao ? `<span>· vale até ${formatarData(a.data_expiracao)}</span>` : ''}
+          </div>
+        </div>
+      </article>`;
+    }).join('');
+
+    histCount.textContent = expirados.length === 0
+      ? 'nenhum'
+      : `${expirados.length} aviso${expirados.length > 1 ? 's' : ''}`;
+
+    histBody.innerHTML = expirados.length === 0
+      ? '<div class="empty"><div class="empty-icon">🗂️</div>Nenhum aviso arquivado ainda</div>'
+      : `<ol class="hist-lista">` + expirados.map((a: any) => {
+          const t = TIPOS_AVISO[a.tipo] ?? TIPOS_AVISO.info;
+          return `<li class="hist-item">
+            <div class="hist-item-topo">
+              <span class="hist-item-titulo">${escapeHtml(a.titulo)}</span>
+              <span class="badge badge-neutral">${t.rotulo}</span>
+            </div>
+            <p class="hist-item-msg">${escapeHtml(a.mensagem)}</p>
+            <div class="hist-item-data">
+              Publicado em ${formatarData(String(a.created_at).slice(0, 10))}
+              ${a.data_expiracao ? ` · encerrado em ${formatarData(a.data_expiracao)}` : ''}
+            </div>
+          </li>`;
+        }).join('') + '</ol>';
   }
 
   let searchTimer: ReturnType<typeof setTimeout>;
@@ -394,7 +494,7 @@ const anoAtual = now.getFullYear();
 
   // ===== LOAD ALL =====
   function loadAll() {
-    loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos();
+    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos();
   }
 
   selMes.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); });
@@ -404,50 +504,106 @@ const anoAtual = now.getFullYear();
 </script>
 
 <style>
+  /* ---------- Barra superior ---------- */
   .top-bar {
-    background: #1e3a8a;
+    background: var(--slate-900);
     color: #fff;
-    padding: .75rem 0;
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 2px 8px rgba(0,0,0,.2);
   }
   .top-bar-inner {
-    max-width: 1200px;
+    max-width: 1180px;
     margin: 0 auto;
-    padding: 0 1rem;
+    padding: var(--sp-3) var(--sp-4);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
+    gap: var(--sp-4);
   }
-  .brand { display: flex; align-items: center; gap: .75rem; }
-  .brand-icon { font-size: 1.75rem; }
-  .brand-title { font-weight: 700; font-size: 1rem; }
-  .brand-sub { font-size: .75rem; opacity: .7; }
-  .header-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-  .month-selector { display: flex; align-items: center; gap: .5rem; }
-  .month-selector .form-control {
-    background: rgba(255,255,255,.15);
-    border-color: rgba(255,255,255,.3);
+  .brand { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+  .brand-icon {
+    font-size: 1.15rem;
+    width: 2.25rem; height: 2.25rem;
+    display: grid; place-items: center;
+    background: var(--accent);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+  .brand-text { min-width: 0; }
+  .brand-title {
+    font-weight: 650;
+    font-size: .95rem;
+    letter-spacing: -.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .brand-sub { font-size: .75rem; opacity: .55; }
+
+  .admin-link {
+    background: rgba(255,255,255,.1);
     color: #fff;
+    border: 1px solid rgba(255,255,255,.15);
+    flex-shrink: 0;
   }
-  .month-selector .form-control option { background: #1e3a8a; }
+  .admin-link:hover { background: rgba(255,255,255,.18); color: #fff; }
 
-  .dashboard {
-    max-width: 1200px;
+  /* O seletor de período ganha faixa própria: no celular ele não cabe
+     na mesma linha da marca sem espremer os dois. */
+  .top-bar-period {
+    border-top: 1px solid rgba(255,255,255,.08);
+    background: rgba(0,0,0,.15);
+  }
+  .top-bar-period {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    max-width: 1180px;
     margin: 0 auto;
-    padding: 1.5rem 1rem;
+    padding: var(--sp-2) var(--sp-4);
   }
-  .section { margin-bottom: 1.5rem; }
+  .period-label {
+    font-size: .7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    opacity: .55;
+    flex-shrink: 0;
+  }
+  .period-controls { display: flex; gap: var(--sp-2); flex: 1; min-width: 0; }
+  .period-controls .form-control {
+    min-height: 2.25rem;
+    background: rgba(255,255,255,.1);
+    border-color: rgba(255,255,255,.18);
+    color: #fff;
+    font-size: .875rem;
+  }
+  .period-controls .form-control:focus {
+    border-color: rgba(255,255,255,.5);
+    box-shadow: none;
+  }
+  .period-controls select { flex: 1; min-width: 0; }
+  .period-controls input { width: 5.5rem; flex-shrink: 0; }
+  .period-controls option { background: var(--slate-800); color: #fff; }
 
-  .filter-tipo.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .dashboard { max-width: 1180px; margin: 0 auto; padding: var(--sp-5) var(--sp-4); }
+  .section { margin-bottom: var(--sp-5); }
 
-  @media (max-width: 600px) {
-    .top-bar-inner { flex-direction: column; align-items: flex-start; }
-    .header-right { width: 100%; }
+  .filter-tipo.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ---------- Filtros de produtos ---------- */
+  .prod-filtros { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+  .prod-filtros #busca-prod { width: 15rem; }
+  .prod-filtros #prod-mes { width: auto; }
+
+  @media (max-width: 640px) {
+    .brand-sub { display: none; }
+    .admin-link span { display: none; }
+    .prod-filtros { width: 100%; }
+    .prod-filtros #busca-prod,
+    .prod-filtros #prod-mes { width: 100%; }
+    .aviso { padding: var(--sp-3); }
   }
 </style>
 </body>

@@ -1,0 +1,233 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Avisos" active="avisos">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-4);flex-wrap:wrap;gap:var(--sp-2)">
+    <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm filter-btn active" data-filtro="">Todos</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-filtro="ativos">Ativos</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-filtro="expirados">Expirados</button>
+    </div>
+    <button class="btn btn-primary" id="btn-novo">+ Novo Aviso</button>
+  </div>
+
+  <div class="card">
+    <div class="card-body" style="padding:0">
+      <div class="table-wrap">
+        <table class="table-cards">
+          <thead>
+            <tr>
+              <th>Aviso</th>
+              <th>Tipo</th>
+              <th>Situação</th>
+              <th>Validade</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="5"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Novo Aviso</span>
+        <button class="modal-close" id="modal-close" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="titulo">Título *</label>
+          <input class="form-control" id="titulo" required placeholder="Ex: Escala de fim de ano" maxlength="120" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="mensagem">Mensagem *</label>
+          <textarea class="form-control" id="mensagem" required placeholder="Escreva o aviso para a equipe..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tipo">Tipo</label>
+          <select class="form-control" id="tipo">
+            <option value="info">Informativo</option>
+            <option value="atencao">Atenção</option>
+            <option value="urgente">Urgente</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="data_expiracao">Válido até</label>
+          <input class="form-control" type="date" id="data_expiracao" />
+          <p class="form-hint">
+            Deixe em branco para o aviso ficar no ar até você removê-lo. Ao
+            vencer, ele sai do dashboard e passa para o histórico.
+          </p>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer">
+            <input type="checkbox" id="fixado" style="width:1.1rem;height:1.1rem;accent-color:var(--accent)" />
+            <span style="font-size:.9rem">Fixar no topo do dashboard</span>
+          </label>
+        </div>
+        <div id="form-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-4);margin-bottom:0"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Publicar</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+  import { formatarData } from '../../lib/dates';
+
+  let editingId: string | null = null;
+  let filtro = '';
+
+  const TIPOS: Record<string, { label: string; badge: string }> = {
+    info:    { label: 'Informativo', badge: 'badge-info' },
+    atencao: { label: 'Atenção',     badge: 'badge-warning' },
+    urgente: { label: 'Urgente',     badge: 'badge-danger' },
+  };
+
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
+  async function load() {
+    let query = supabase
+      .from('avisos_com_status')
+      .select('*')
+      .order('fixado', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (filtro === 'ativos')    query = query.eq('ativo', true);
+    if (filtro === 'expirados') query = query.eq('ativo', false);
+
+    const { data, error } = await query;
+    const tbody = document.getElementById('tbody')!;
+
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-danger" style="margin:var(--sp-4)">Erro ao carregar avisos: ${escapeHtml(error.message)}</div></td></tr>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="empty-icon">📣</div>Nenhum aviso publicado</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.map((a: any) => {
+      const t = TIPOS[a.tipo] ?? TIPOS.info;
+      return `<tr>
+        <td data-label="Aviso" class="cell-block">
+          <div style="text-align:left">
+            <div style="font-weight:600">${a.fixado ? '📌 ' : ''}${escapeHtml(a.titulo)}</div>
+            <div style="font-size:.8rem;color:var(--text-muted);margin-top:2px">${escapeHtml(a.mensagem).slice(0, 90)}${a.mensagem.length > 90 ? '…' : ''}</div>
+          </div>
+        </td>
+        <td data-label="Tipo"><span class="badge ${t.badge}">${t.label}</span></td>
+        <td data-label="Situação">
+          <span class="badge ${a.ativo ? 'badge-success' : 'badge-neutral'}">${a.ativo ? 'Ativo' : 'Expirado'}</span>
+        </td>
+        <td data-label="Validade">${a.data_expiracao ? formatarData(a.data_expiracao) : 'Sem prazo'}</td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="editAviso('${a.id}')" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="delAviso('${a.id}')" aria-label="Excluir">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openModal() { document.getElementById('modal')!.style.display = 'flex'; }
+
+  function closeModal() {
+    document.getElementById('modal')!.style.display = 'none';
+    document.getElementById('form-error')!.style.display = 'none';
+    (document.getElementById('titulo') as HTMLInputElement).value = '';
+    (document.getElementById('mensagem') as HTMLTextAreaElement).value = '';
+    (document.getElementById('tipo') as HTMLSelectElement).value = 'info';
+    (document.getElementById('data_expiracao') as HTMLInputElement).value = '';
+    (document.getElementById('fixado') as HTMLInputElement).checked = false;
+    editingId = null;
+  }
+
+  function mostrarErro(msg: string) {
+    const el = document.getElementById('form-error')!;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  document.getElementById('btn-novo')?.addEventListener('click', () => {
+    closeModal();
+    document.getElementById('modal-title')!.textContent = 'Novo Aviso';
+    document.getElementById('btn-save')!.textContent = 'Publicar';
+    openModal();
+  });
+  document.getElementById('modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+
+  (window as any).editAviso = async (id: string) => {
+    const { data, error } = await supabase.from('avisos').select('*').eq('id', id).single();
+    if (error || !data) { alert('Não foi possível carregar o aviso.'); return; }
+    editingId = id;
+    document.getElementById('modal-title')!.textContent = 'Editar Aviso';
+    document.getElementById('btn-save')!.textContent = 'Salvar';
+    (document.getElementById('titulo') as HTMLInputElement).value = data.titulo;
+    (document.getElementById('mensagem') as HTMLTextAreaElement).value = data.mensagem;
+    (document.getElementById('tipo') as HTMLSelectElement).value = data.tipo;
+    (document.getElementById('data_expiracao') as HTMLInputElement).value = data.data_expiracao ?? '';
+    (document.getElementById('fixado') as HTMLInputElement).checked = data.fixado;
+    openModal();
+  };
+
+  (window as any).delAviso = async (id: string) => {
+    if (!confirm('Excluir este aviso? Ele sai também do histórico.')) return;
+    const { error } = await supabase.from('avisos').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir o aviso: ' + error.message); return; }
+    load();
+  };
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const titulo = (document.getElementById('titulo') as HTMLInputElement).value.trim();
+    const mensagem = (document.getElementById('mensagem') as HTMLTextAreaElement).value.trim();
+    const tipo = (document.getElementById('tipo') as HTMLSelectElement).value;
+    const data_expiracao = (document.getElementById('data_expiracao') as HTMLInputElement).value || null;
+    const fixado = (document.getElementById('fixado') as HTMLInputElement).checked;
+
+    if (!titulo || !mensagem) {
+      mostrarErro('Título e mensagem são obrigatórios.');
+      return;
+    }
+    document.getElementById('form-error')!.style.display = 'none';
+
+    const { error } = editingId
+      ? await supabase.from('avisos').update({ titulo, mensagem, tipo, data_expiracao, fixado }).eq('id', editingId)
+      : await supabase.from('avisos').insert({ titulo, mensagem, tipo, data_expiracao, fixado });
+
+    if (error) { mostrarErro('Erro ao salvar o aviso: ' + error.message); return; }
+    closeModal();
+    load();
+  });
+
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      filtro = (btn as HTMLElement).dataset.filtro ?? '';
+      load();
+    });
+  });
+
+  load();
+</script>
+
+<style>
+  .filter-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+</style>

@@ -14,7 +14,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   <div class="card">
     <div class="card-body">
       <div class="table-wrap">
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th>Funcionário</th>
@@ -97,14 +97,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const badge = f.tipo === 'ferias' ? 'badge-info' : 'badge-warning';
       const label = f.tipo === 'ferias' ? '🏖️ Férias' : '📋 Folga';
       return `<tr>
-        <td><strong>${f.funcionarios?.nome ?? '—'}</strong></td>
-        <td><span class="badge ${badge}">${label}</span></td>
-        <td>${formatDate(f.data_inicio)}</td>
-        <td>${formatDate(f.data_fim)}</td>
-        <td>${dias} dia${dias > 1 ? 's' : ''}</td>
-        <td style="display:flex;gap:.5rem">
-          <button class="btn btn-ghost btn-sm" onclick="openEdit('${f.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteFolga('${f.id}')">🗑️</button>
+        <td data-label="Funcionário"><strong>${f.funcionarios?.nome ?? '—'}</strong></td>
+        <td data-label="Tipo"><span class="badge ${badge}">${label}</span></td>
+        <td data-label="Início">${formatDate(f.data_inicio)}</td>
+        <td data-label="Fim">${formatDate(f.data_fim)}</td>
+        <td data-label="Dias">${dias} dia${dias > 1 ? 's' : ''}</td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEdit('${f.id}')" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteFolga('${f.id}')" aria-label="Excluir">🗑️</button>
         </td>
       </tr>`;
     }).join('');
@@ -206,6 +206,6 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 </script>
 
 <style>
-  .filter-btn.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 </style>
 

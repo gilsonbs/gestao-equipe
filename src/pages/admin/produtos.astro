@@ -47,7 +47,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   <div class="card">
     <div class="card-body">
       <div class="table-wrap">
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th>#</th>
@@ -145,15 +145,15 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
     tbody.innerHTML = data.map((p, i) => `
       <tr>
-        <td><strong>#${i + 1}</strong></td>
-        <td>${p.nome}</td>
-        <td>${p.substancia ?? '—'}</td>
-        <td>${p.categoria ?? '—'}</td>
-        <td>${p.quantidade ?? '—'}</td>
-        <td>${p.mes ? `${MESES[p.mes]}/${p.ano}` : '—'}</td>
-        <td style="display:flex;gap:.5rem">
-          <button class="btn btn-ghost btn-sm" onclick="openEdit('${p.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteProd('${p.id}')">🗑️</button>
+        <td data-label="Posição"><strong>#${i + 1}</strong></td>
+        <td data-label="Nome">${p.nome}</td>
+        <td data-label="Substância">${p.substancia ?? '—'}</td>
+        <td data-label="Categoria">${p.categoria ?? '—'}</td>
+        <td data-label="Quantidade">${p.quantidade ?? '—'}</td>
+        <td data-label="Período">${p.mes ? `${MESES[p.mes]}/${p.ano}` : '—'}</td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEdit('${p.id}')" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteProd('${p.id}')" aria-label="Excluir">🗑️</button>
         </td>
       </tr>
     `).join('');

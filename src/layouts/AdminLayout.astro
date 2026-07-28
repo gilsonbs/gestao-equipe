@@ -10,6 +10,7 @@ const base = import.meta.env.BASE_URL;
 
 const navItems = [
   { href: `${base}admin/`, label: 'Início', icon: '🏠', key: 'index' },
+  { href: `${base}admin/avisos/`, label: 'Avisos', icon: '📣', key: 'avisos' },
   { href: `${base}admin/funcionarios/`, label: 'Funcionários', icon: '👤', key: 'funcionarios' },
   { href: `${base}admin/metas/`, label: 'Metas', icon: '🎯', key: 'metas' },
   { href: `${base}admin/vendas/`, label: 'Vendas', icon: '💰', key: 'vendas' },
@@ -55,9 +56,11 @@ const navItems = [
     </div>
   </aside>
 
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
   <div class="admin-main">
     <header class="admin-header">
-      <button class="menu-toggle" id="menu-toggle">☰</button>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Abrir menu">☰</button>
       <h1 class="admin-page-title">{title}</h1>
     </header>
     <main class="admin-content">
@@ -84,9 +87,20 @@ const navItems = [
     window.location.href = import.meta.env.BASE_URL + 'admin/login/';
   });
 
-  // Mobile menu toggle
-  document.getElementById('menu-toggle')?.addEventListener('click', () => {
-    document.querySelector('.sidebar')?.classList.toggle('open');
+  // Menu lateral no celular
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+
+  function toggleMenu(abrir?: boolean) {
+    const vaiAbrir = abrir ?? !sidebar?.classList.contains('open');
+    sidebar?.classList.toggle('open', vaiAbrir);
+    overlay?.classList.toggle('show', vaiAbrir);
+  }
+
+  document.getElementById('menu-toggle')?.addEventListener('click', () => toggleMenu());
+  overlay?.addEventListener('click', () => toggleMenu(false));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') toggleMenu(false);
   });
 </script>
 
@@ -97,8 +111,8 @@ const navItems = [
   }
 
   .sidebar {
-    width: 240px;
-    background: #1e3a8a;
+    width: 15rem;
+    background: var(--slate-900);
     color: #fff;
     display: flex;
     flex-direction: column;
@@ -107,90 +121,108 @@ const navItems = [
     left: 0;
     bottom: 0;
     z-index: 100;
-    transition: transform .25s;
+    transition: transform .25s ease;
   }
 
   .sidebar-brand {
-    padding: 1.25rem 1rem;
+    padding: var(--sp-4);
     display: flex;
     align-items: center;
-    gap: .75rem;
-    border-bottom: 1px solid rgba(255,255,255,.1);
+    gap: var(--sp-3);
+    border-bottom: 1px solid rgba(255,255,255,.08);
   }
-  .brand-icon { font-size: 1.75rem; }
-  .brand-name { font-weight: 700; font-size: .95rem; line-height: 1.3; }
-  .brand-name small { font-weight: 400; opacity: .7; font-size: .8rem; }
+  .brand-icon {
+    font-size: 1.25rem;
+    width: 2.25rem; height: 2.25rem;
+    display: grid; place-items: center;
+    background: var(--accent);
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+  }
+  .brand-name { font-weight: 650; font-size: .9rem; line-height: 1.25; letter-spacing: -.01em; }
+  .brand-name small { display: block; font-weight: 400; opacity: .55; font-size: .75rem; }
 
-  .sidebar-nav {
-    flex: 1;
-    padding: .75rem 0;
-    overflow-y: auto;
-  }
+  .sidebar-nav { flex: 1; padding: var(--sp-3) var(--sp-2); overflow-y: auto; }
 
   .nav-item {
     display: flex;
     align-items: center;
-    gap: .75rem;
-    padding: .65rem 1.25rem;
-    color: rgba(255,255,255,.75);
-    font-size: .9rem;
-    transition: background .15s, color .15s;
+    gap: var(--sp-3);
+    padding: var(--sp-3);
+    margin-bottom: 2px;
+    border-radius: var(--radius-sm);
+    color: rgba(255,255,255,.7);
+    font-size: .875rem;
+    font-weight: 500;
     text-decoration: none;
+    transition: background .15s, color .15s;
   }
-  .nav-item:hover { background: rgba(255,255,255,.1); color: #fff; text-decoration: none; }
-  .nav-item.active { background: rgba(255,255,255,.15); color: #fff; border-left: 3px solid #60a5fa; }
-  .nav-icon { width: 1.25rem; text-align: center; }
+  .nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+  .nav-item.active { background: var(--accent); color: #fff; }
+  .nav-icon { width: 1.25rem; text-align: center; flex-shrink: 0; }
 
   .sidebar-footer {
-    border-top: 1px solid rgba(255,255,255,.1);
-    padding: .5rem 0;
+    border-top: 1px solid rgba(255,255,255,.08);
+    padding: var(--sp-2);
   }
 
   .admin-main {
     flex: 1;
-    margin-left: 240px;
+    margin-left: 15rem;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    min-width: 0;
   }
 
   .admin-header {
-    background: #fff;
-    border-bottom: 1px solid var(--color-border, #e2e8f0);
-    padding: 1rem 1.5rem;
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: var(--sp-3) var(--sp-5);
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: var(--sp-3);
     position: sticky;
     top: 0;
     z-index: 50;
   }
 
   .admin-page-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #1e293b;
+    font-size: 1.05rem;
+    font-weight: 650;
+    letter-spacing: -.015em;
   }
 
   .menu-toggle {
     display: none;
     background: none;
-    border: none;
-    font-size: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 1.1rem;
+    width: 2.5rem; height: 2.5rem;
     cursor: pointer;
+    color: var(--slate-700);
   }
 
-  .admin-content {
-    flex: 1;
-    padding: 1.5rem;
-    background: #f1f5f9;
-  }
+  .admin-content { flex: 1; padding: var(--sp-5); min-width: 0; }
 
-  @media (max-width: 768px) {
-    .sidebar { transform: translateX(-100%); }
+  /* Escurece o conteúdo quando o menu abre por cima, no celular */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,.5);
+    z-index: 99;
+  }
+  .sidebar-overlay.show { display: block; }
+
+  @media (max-width: 900px) {
+    .sidebar { transform: translateX(-100%); box-shadow: var(--shadow-lg); }
     .sidebar.open { transform: translateX(0); }
     .admin-main { margin-left: 0; }
     .menu-toggle { display: block; }
+    .admin-content { padding: var(--sp-4); }
   }
 </style>
 

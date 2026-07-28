@@ -31,7 +31,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       </div>
       <div class="card-body">
         <div class="table-wrap">
-          <table>
+          <table class="table-cards">
             <thead>
               <tr><th>Funcionário</th><th>Valor (R$)</th><th>Ações</th></tr>
             </thead>
@@ -51,7 +51,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       </div>
       <div class="card-body">
         <div class="table-wrap">
-          <table>
+          <table class="table-cards">
             <thead>
               <tr><th>Total (R$)</th><th>Ações</th></tr>
             </thead>
@@ -155,11 +155,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
     tbody.innerHTML = data.map((v: any) => `
       <tr>
-        <td>${(v.funcionarios as any)?.nome ?? '—'}</td>
-        <td>R$ ${Number(v.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-        <td style="display:flex;gap:.5rem">
-          <button class="btn btn-ghost btn-sm" onclick="openEditFunc('${v.id}', ${v.valor})">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteVendaFunc('${v.id}')">🗑️</button>
+        <td data-label="Funcionário">${(v.funcionarios as any)?.nome ?? '—'}</td>
+        <td data-label="Valor">R$ ${Number(v.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditFunc('${v.id}', ${v.valor})" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteVendaFunc('${v.id}')" aria-label="Excluir">🗑️</button>
         </td>
       </tr>
     `).join('');
@@ -179,10 +179,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
     tbody.innerHTML = data.map((v: any) => `
       <tr>
-        <td><strong>R$ ${Number(v.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong></td>
-        <td style="display:flex;gap:.5rem">
-          <button class="btn btn-ghost btn-sm" onclick="openEditLoja('${v.id}', ${v.valor_total})">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteLoja('${v.id}')">🗑️</button>
+        <td data-label="Total"><strong>R$ ${Number(v.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong></td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditLoja('${v.id}', ${v.valor_total})" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteLoja('${v.id}')" aria-label="Excluir">🗑️</button>
         </td>
       </tr>
     `).join('');

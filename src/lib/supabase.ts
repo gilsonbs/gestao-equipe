@@ -65,6 +65,23 @@ export type Folga = {
   funcionarios?: { nome: string };
 };
 
+export type Aviso = {
+  id: string;
+  titulo: string;
+  mensagem: string;
+  tipo: 'info' | 'atencao' | 'urgente';
+  fixado: boolean;
+  /** NULL = sem prazo, o aviso fica no ar até ser removido. */
+  data_expiracao: string | null;
+  created_at: string;
+};
+
+/** Linha da view `avisos_com_status`. */
+export type AvisoComStatus = Aviso & {
+  /** false quando data_expiracao já passou. */
+  ativo: boolean;
+};
+
 export type ProdutoTop = {
   id: string;
   nome: string;

@@ -9,7 +9,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   <div class="card">
     <div class="card-body">
       <div class="table-wrap">
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th>Nome</th>
@@ -82,13 +82,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
     tbody.innerHTML = data.map((f: Func) => `
       <tr>
-        <td><strong>${f.nome}</strong></td>
-        <td>${f.cargo ?? '—'}</td>
-        <td>${f.data_nascimento ? formatDate(f.data_nascimento) : '—'}</td>
-        <td><span class="badge ${f.ativo ? 'badge-success' : 'badge-danger'}">${f.ativo ? 'Ativo' : 'Inativo'}</span></td>
-        <td style="display:flex;gap:.5rem">
+        <td data-label="Nome"><strong>${f.nome}</strong></td>
+        <td data-label="Cargo">${f.cargo ?? '—'}</td>
+        <td data-label="Aniversário">${f.data_nascimento ? formatDate(f.data_nascimento) : '—'}</td>
+        <td data-label="Status"><span class="badge ${f.ativo ? 'badge-success' : 'badge-danger'}">${f.ativo ? 'Ativo' : 'Inativo'}</span></td>
+        <td data-label="Ações" class="cell-actions">
           <button class="btn btn-ghost btn-sm" onclick="openEdit('${f.id}')">✏️ Editar</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteFunc('${f.id}')">🗑️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteFunc('${f.id}')" aria-label="Excluir">🗑️</button>
         </td>
       </tr>
     `).join('');

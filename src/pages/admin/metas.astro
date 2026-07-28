@@ -26,7 +26,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   <div class="card">
     <div class="card-body">
       <div class="table-wrap">
-        <table>
+        <table class="table-cards">
           <thead>
             <tr>
               <th>Funcionário</th>
@@ -111,19 +111,19 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const badge = pct >= 100 ? 'badge-success' : pct >= 70 ? 'badge-warning' : 'badge-danger';
       const label = pct >= 100 ? 'Atingida' : pct >= 70 ? 'Em progresso' : 'Abaixo';
       return `<tr>
-        <td><strong>${m.nome ?? '—'}</strong></td>
-        <td>R$ ${Number(m.valor_meta).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-        <td>R$ ${Number(m.valor_realizado).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-        <td>
-          <div style="min-width:80px">
+        <td data-label="Funcionário"><strong>${m.nome ?? '—'}</strong></td>
+        <td data-label="Meta">R$ ${Number(m.valor_meta).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td data-label="Realizado">R$ ${Number(m.valor_realizado).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td data-label="Atingimento">
+          <div style="min-width:80px;width:100%;max-width:12rem">
             <div style="font-weight:600;margin-bottom:4px">${pct}%</div>
             <div class="progress"><div class="progress-bar ${cls}" style="width:${Math.min(pct,100)}%"></div></div>
           </div>
         </td>
-        <td><span class="badge ${badge}">${label}</span></td>
-        <td style="display:flex;gap:.5rem">
-          <button class="btn btn-ghost btn-sm" onclick="openEdit('${m.meta_id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteMeta('${m.meta_id}')">🗑️</button>
+        <td data-label="Status"><span class="badge ${badge}">${label}</span></td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEdit('${m.meta_id}')" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteMeta('${m.meta_id}')" aria-label="Excluir">🗑️</button>
         </td>
       </tr>`;
     }).join('');

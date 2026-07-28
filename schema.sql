@@ -73,6 +73,18 @@ CREATE TABLE IF NOT EXISTS produtos_top (
   created_at timestamptz DEFAULT now()
 );
 
+-- Avisos para a equipe, exibidos no dashboard
+CREATE TABLE IF NOT EXISTS avisos (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  titulo text NOT NULL,
+  mensagem text NOT NULL,
+  tipo text NOT NULL DEFAULT 'info' CHECK (tipo IN ('info', 'atencao', 'urgente')),
+  fixado boolean NOT NULL DEFAULT false,
+  -- NULL = sem validade, o aviso fica ativo até ser removido
+  data_expiracao date,
+  created_at timestamptz DEFAULT now()
+);
+
 -- =============================================
 -- View de desempenho: junta meta + realizado
 --
@@ -108,6 +120,19 @@ JOIN funcionarios f
 GRANT SELECT ON desempenho_mensal TO anon, authenticated;
 
 -- =============================================
+-- View de avisos: marca quais ainda estão vigentes, para que o
+-- dashboard e o admin usem exatamente a mesma regra de expiração.
+-- =============================================
+CREATE OR REPLACE VIEW avisos_com_status
+WITH (security_invoker = on) AS
+SELECT
+  a.*,
+  (a.data_expiracao IS NULL OR a.data_expiracao >= CURRENT_DATE) AS ativo
+FROM avisos a;
+
+GRANT SELECT ON avisos_com_status TO anon, authenticated;
+
+-- =============================================
 -- Row Level Security (RLS)
 -- =============================================
 
@@ -117,6 +142,7 @@ ALTER TABLE vendas_funcionario  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vendas_loja         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE folgas              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE produtos_top        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE avisos              ENABLE ROW LEVEL SECURITY;
 
 -- Leitura pública (dashboard sem login)
 CREATE POLICY "Leitura pública - funcionarios"       ON funcionarios       FOR SELECT USING (true);
@@ -125,6 +151,7 @@ CREATE POLICY "Leitura pública - vendas_funcionario" ON vendas_funcionario FOR 
 CREATE POLICY "Leitura pública - vendas_loja"        ON vendas_loja        FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - folgas"             ON folgas             FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - produtos_top"       ON produtos_top       FOR SELECT USING (true);
+CREATE POLICY "Leitura pública - avisos"             ON avisos             FOR SELECT USING (true);
 
 -- Escrita apenas para usuários autenticados (admin).
 -- O (select ...) faz o Postgres avaliar a função uma vez por query
@@ -147,6 +174,9 @@ CREATE POLICY "Admin - folgas" ON folgas
 CREATE POLICY "Admin - produtos_top" ON produtos_top
   FOR ALL USING ((select auth.role()) = 'authenticated')
   WITH CHECK ((select auth.role()) = 'authenticated');
+CREATE POLICY "Admin - avisos" ON avisos
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
 
 -- =============================================
 -- Índices para melhorar performance
@@ -158,3 +188,5 @@ CREATE INDEX IF NOT EXISTS idx_folgas_data_inicio         ON folgas(data_inicio)
 CREATE INDEX IF NOT EXISTS idx_produtos_top_nome          ON produtos_top(nome);
 CREATE INDEX IF NOT EXISTS idx_produtos_top_substancia    ON produtos_top(substancia);
 CREATE INDEX IF NOT EXISTS idx_funcionarios_ativo         ON funcionarios(ativo);
+CREATE INDEX IF NOT EXISTS idx_avisos_ordem                ON avisos(fixado DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_avisos_expiracao            ON avisos(data_expiracao);

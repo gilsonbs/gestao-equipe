@@ -126,6 +126,7 @@ A partir daí, todo push na `main` dispara build e publicação.
 
 | Tabela | Guarda |
 |---|---|
+| `avisos` | Recados para a equipe, exibidos no dashboard |
 | `funcionarios` | Nome, cargo, data de nascimento, ativo/inativo |
 | `metas` | Meta mensal pactuada por funcionário |
 | `vendas_funcionario` | Valor efetivamente vendido por funcionário no mês |
@@ -142,6 +143,20 @@ entra no cálculo da média do dashboard.
 Tanto `metas` quanto `vendas_funcionario` têm
 `UNIQUE(funcionario_id, mes, ano)`: existe no máximo um registro de cada por
 funcionário por mês.
+
+## Avisos
+
+O admin publica recados em **Avisos**, e eles aparecem no topo do dashboard.
+Cada aviso tem um tipo — informativo, atenção ou urgente — que define a cor da
+faixa lateral, e pode ser fixado para ficar sempre no topo.
+
+A **validade** é opcional. Quando definida, o aviso sai do dashboard no dia
+seguinte ao vencimento e passa para o **histórico**, um painel recolhível no
+fim da página onde a equipe consulta o que já foi comunicado. Sem validade, o
+aviso fica no ar até ser removido manualmente.
+
+A regra de expiração vive na view `avisos_com_status`, e não no código das
+páginas, para que dashboard e admin nunca discordem sobre o que está vigente.
 
 ## Estrutura
 
