@@ -1,0 +1,340 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Top Produtos" active="produtos">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      <input class="form-control" id="busca" placeholder="🔍 Buscar por nome ou substância..." style="width:280px" />
+    </div>
+    <div style="display:flex;gap:.5rem">
+      <button class="btn btn-ghost" id="btn-import">📊 Importar CSV</button>
+      <button class="btn btn-primary" id="btn-novo">+ Novo Produto</button>
+    </div>
+  </div>
+
+  <!-- CSV Import -->
+  <div class="card" id="import-panel" style="display:none;margin-bottom:1rem">
+    <div class="card-header">
+      <span class="card-title">📊 Importar Planilha CSV</span>
+      <button class="btn btn-ghost btn-sm" id="btn-close-import">✕ Fechar</button>
+    </div>
+    <div class="card-body">
+      <p style="font-size:.875rem;color:#64748b;margin-bottom:1rem">
+        O arquivo CSV deve ter as colunas: <strong>nome, substancia, categoria, quantidade, mes, ano</strong>
+      </p>
+      <div class="form-group">
+        <label class="form-label">Arquivo CSV</label>
+        <input class="form-control" type="file" id="csv-file" accept=".csv" />
+      </div>
+      <div id="csv-preview" style="display:none;margin-top:1rem">
+        <div style="font-size:.875rem;font-weight:600;margin-bottom:.5rem" id="csv-count"></div>
+        <div class="table-wrap" style="max-height:200px;overflow-y:auto">
+          <table id="csv-table">
+            <thead><tr><th>Nome</th><th>Substância</th><th>Categoria</th><th>Qtd</th><th>Mês/Ano</th></tr></thead>
+            <tbody id="csv-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="import-error" class="alert alert-danger" style="display:none;margin-top:.75rem"></div>
+      <div id="import-success" class="alert alert-success" style="display:none;margin-top:.75rem"></div>
+      <div style="margin-top:1rem;display:flex;justify-content:flex-end;gap:.5rem">
+        <button class="btn btn-ghost" id="btn-cancel-import">Cancelar</button>
+        <button class="btn btn-secondary" id="btn-do-import" disabled>Importar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Nome</th>
+              <th>Substância</th>
+              <th>Categoria</th>
+              <th>Quantidade</th>
+              <th>Período</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="7"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Novo Produto</span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="prod-id" />
+        <div class="form-group">
+          <label class="form-label">Nome do Produto *</label>
+          <input class="form-control" id="nome" required placeholder="Ex: Dipirona 500mg" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Substância Ativa</label>
+          <input class="form-control" id="substancia" placeholder="Ex: Dipirona Monoidratada" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Categoria</label>
+          <input class="form-control" id="categoria" placeholder="Ex: Analgésico, Antibiótico..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Quantidade Vendida</label>
+          <input class="form-control" type="number" id="quantidade" min="0" placeholder="0" />
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Mês</label>
+            <select class="form-control" id="mes">
+              <option value="">Todos</option>
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+              <option value="3">Março</option><option value="4">Abril</option>
+              <option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option>
+              <option value="9">Setembro</option><option value="10">Outubro</option>
+              <option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ano</label>
+            <input class="form-control" type="number" id="ano" placeholder={String(new Date().getFullYear())} />
+          </div>
+        </div>
+        <div id="form-error" class="alert alert-danger" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  let editingId: string | null = null;
+  let allData: any[] = [];
+  let csvData: any[] = [];
+
+  const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  async function load() {
+    const { data } = await supabase
+      .from('produtos_top')
+      .select('*')
+      .order('quantidade', { ascending: false, nullsFirst: false });
+    allData = data ?? [];
+    render(allData);
+  }
+
+  function render(data: any[]) {
+    const tbody = document.getElementById('tbody')!;
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">💊</div>Nenhum produto cadastrado</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((p, i) => `
+      <tr>
+        <td><strong>#${i + 1}</strong></td>
+        <td>${p.nome}</td>
+        <td>${p.substancia ?? '—'}</td>
+        <td>${p.categoria ?? '—'}</td>
+        <td>${p.quantidade ?? '—'}</td>
+        <td>${p.mes ? `${MESES[p.mes]}/${p.ano}` : '—'}</td>
+        <td style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="openEdit('${p.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteProd('${p.id}')">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // Search
+  let searchTimer: ReturnType<typeof setTimeout>;
+  document.getElementById('busca')?.addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const q = (e.target as HTMLInputElement).value.toLowerCase().trim();
+      if (!q) { render(allData); return; }
+      render(allData.filter(p =>
+        p.nome?.toLowerCase().includes(q) || p.substancia?.toLowerCase().includes(q)
+      ));
+    }, 200);
+  });
+
+  // Modal
+  function openModal() { document.getElementById('modal')!.style.display = 'flex'; }
+  function closeModal() {
+    document.getElementById('modal')!.style.display = 'none';
+    document.getElementById('form-error')!.style.display = 'none';
+    editingId = null;
+    ['nome','substancia','categoria','quantidade','mes','ano'].forEach(id => {
+      (document.getElementById(id) as HTMLInputElement).value = '';
+    });
+  }
+  document.getElementById('btn-novo')?.addEventListener('click', () => {
+    document.getElementById('modal-title')!.textContent = 'Novo Produto';
+    editingId = null;
+    openModal();
+  });
+  document.getElementById('modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+
+  (window as any).openEdit = async (id: string) => {
+    const { data } = await supabase.from('produtos_top').select('*').eq('id', id).single();
+    if (!data) return;
+    editingId = id;
+    document.getElementById('modal-title')!.textContent = 'Editar Produto';
+    (document.getElementById('nome') as HTMLInputElement).value = data.nome;
+    (document.getElementById('substancia') as HTMLInputElement).value = data.substancia ?? '';
+    (document.getElementById('categoria') as HTMLInputElement).value = data.categoria ?? '';
+    (document.getElementById('quantidade') as HTMLInputElement).value = data.quantidade ?? '';
+    (document.getElementById('mes') as HTMLSelectElement).value = data.mes ?? '';
+    (document.getElementById('ano') as HTMLInputElement).value = data.ano ?? '';
+    openModal();
+  };
+
+  (window as any).deleteProd = async (id: string) => {
+    if (!confirm('Excluir este produto?')) return;
+    const { error } = await supabase.from('produtos_top').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir o produto: ' + error.message); return; }
+    load();
+  };
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const nome = (document.getElementById('nome') as HTMLInputElement).value.trim();
+    const substancia = (document.getElementById('substancia') as HTMLInputElement).value.trim() || null;
+    const categoria = (document.getElementById('categoria') as HTMLInputElement).value.trim() || null;
+    const qtd = (document.getElementById('quantidade') as HTMLInputElement).value;
+    const quantidade = qtd ? parseInt(qtd) : null;
+    const mesVal = (document.getElementById('mes') as HTMLSelectElement).value;
+    const mes = mesVal ? parseInt(mesVal) : null;
+    const anoVal = (document.getElementById('ano') as HTMLInputElement).value;
+    const ano = anoVal ? parseInt(anoVal) : null;
+    const errorDiv = document.getElementById('form-error')!;
+
+    if (!nome) { errorDiv.textContent = 'Nome é obrigatório.'; errorDiv.style.display = 'block'; return; }
+    errorDiv.style.display = 'none';
+
+    const { error } = editingId
+      ? await supabase.from('produtos_top').update({ nome, substancia, categoria, quantidade, mes, ano }).eq('id', editingId)
+      : await supabase.from('produtos_top').insert({ nome, substancia, categoria, quantidade, mes, ano });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar o produto: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
+    }
+    closeModal(); load();
+  });
+
+  // CSV Import
+  document.getElementById('btn-import')?.addEventListener('click', () => {
+    document.getElementById('import-panel')!.style.display = 'block';
+  });
+  document.getElementById('btn-close-import')?.addEventListener('click', () => {
+    document.getElementById('import-panel')!.style.display = 'none';
+  });
+  document.getElementById('btn-cancel-import')?.addEventListener('click', () => {
+    document.getElementById('import-panel')!.style.display = 'none';
+  });
+
+  document.getElementById('csv-file')?.addEventListener('change', (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      parseCsv(text);
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  function parseCsv(text: string) {
+    const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) {
+      showImportError('Arquivo vazio ou sem dados.');
+      return;
+    }
+    const headers = lines[0].split(/[,;]/).map(h => h.trim().toLowerCase().replace(/"/g,''));
+    const required = ['nome'];
+    const missing = required.filter(r => !headers.includes(r));
+    if (missing.length > 0) {
+      showImportError(`Colunas obrigatórias não encontradas: ${missing.join(', ')}`);
+      return;
+    }
+
+    csvData = lines.slice(1).map(line => {
+      const cols = line.split(/[,;]/).map(c => c.trim().replace(/^"|"$/g, ''));
+      const row: any = {};
+      headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
+      return {
+        nome: row.nome || '',
+        substancia: row.substancia || null,
+        categoria: row.categoria || null,
+        quantidade: row.quantidade ? parseInt(row.quantidade) : null,
+        mes: row.mes ? parseInt(row.mes) : null,
+        ano: row.ano ? parseInt(row.ano) : null,
+      };
+    }).filter(r => r.nome);
+
+    const tbody = document.getElementById('csv-tbody')!;
+    const MESES_ARR = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    tbody.innerHTML = csvData.map(r => `
+      <tr>
+        <td>${r.nome}</td>
+        <td>${r.substancia ?? '—'}</td>
+        <td>${r.categoria ?? '—'}</td>
+        <td>${r.quantidade ?? '—'}</td>
+        <td>${r.mes ? `${MESES_ARR[r.mes]}/${r.ano}` : '—'}</td>
+      </tr>
+    `).join('');
+
+    document.getElementById('csv-count')!.textContent = `${csvData.length} produto(s) encontrado(s)`;
+    document.getElementById('csv-preview')!.style.display = 'block';
+    document.getElementById('import-error')!.style.display = 'none';
+    (document.getElementById('btn-do-import') as HTMLButtonElement).disabled = csvData.length === 0;
+  }
+
+  function showImportError(msg: string) {
+    const el = document.getElementById('import-error')!;
+    el.textContent = msg;
+    el.style.display = 'block';
+    document.getElementById('csv-preview')!.style.display = 'none';
+    (document.getElementById('btn-do-import') as HTMLButtonElement).disabled = true;
+  }
+
+  document.getElementById('btn-do-import')?.addEventListener('click', async () => {
+    if (csvData.length === 0) return;
+    const btn = document.getElementById('btn-do-import') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'Importando...';
+
+    const { error } = await supabase.from('produtos_top').insert(csvData);
+    if (error) {
+      showImportError('Erro ao importar: ' + error.message);
+      btn.disabled = false;
+      btn.textContent = 'Importar';
+    } else {
+      document.getElementById('import-success')!.textContent = `${csvData.length} produto(s) importado(s) com sucesso!`;
+      document.getElementById('import-success')!.style.display = 'block';
+      btn.textContent = 'Importado!';
+      csvData = [];
+      load();
+      setTimeout(() => { document.getElementById('import-panel')!.style.display = 'none'; }, 1500);
+    }
+  });
+
+  load();
+</script>
+

@@ -1,0 +1,103 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+<AdminLayout title="Painel Admin" active="index">
+  <div class="grid-4" style="margin-bottom:1.5rem">
+    <div class="stat-card" id="stat-funcionarios">
+      <div class="stat-label">Funcionários Ativos</div>
+      <div class="stat-value" id="num-func">—</div>
+      <div class="stat-sub">cadastrados</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Metas este mês</div>
+      <div class="stat-value" id="num-metas">—</div>
+      <div class="stat-sub">lançadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Folgas este mês</div>
+      <div class="stat-value" id="num-folgas">—</div>
+      <div class="stat-sub">agendadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Top Produtos</div>
+      <div class="stat-value" id="num-produtos">—</div>
+      <div class="stat-sub">cadastrados</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">⚡ Acesso Rápido</span>
+      </div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:.75rem">
+        <a href={`${base}admin/funcionarios/`} class="btn btn-ghost" style="justify-content:flex-start">👤 Gerenciar Funcionários</a>
+        <a href={`${base}admin/metas/`} class="btn btn-ghost" style="justify-content:flex-start">🎯 Lançar Metas</a>
+        <a href={`${base}admin/vendas/`} class="btn btn-ghost" style="justify-content:flex-start">💰 Lançar Vendas</a>
+        <a href={`${base}admin/folgas/`} class="btn btn-ghost" style="justify-content:flex-start">📅 Gerenciar Folgas & Férias</a>
+        <a href={`${base}admin/produtos/`} class="btn btn-ghost" style="justify-content:flex-start">💊 Gerenciar Top Produtos</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🎂 Aniversários do Mês</span>
+      </div>
+      <div class="card-body" id="aniv-list">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+  import { intervaloDoMes } from '../../lib/dates';
+
+  const now = new Date();
+  const mes = now.getMonth() + 1;
+  const ano = now.getFullYear();
+  const { inicio, fim } = intervaloDoMes(mes, ano);
+
+  async function loadStats() {
+    const [funcRes, metasRes, folgasRes, prodRes, anivRes] = await Promise.all([
+      supabase.from('funcionarios').select('id', { count: 'exact', head: true }).eq('ativo', true),
+      supabase.from('metas').select('id', { count: 'exact', head: true }).eq('mes', mes).eq('ano', ano),
+      supabase.from('folgas').select('id', { count: 'exact', head: true })
+        .lte('data_inicio', fim).gte('data_fim', inicio),
+      supabase.from('produtos_top').select('id', { count: 'exact', head: true }),
+      supabase.from('funcionarios').select('nome, data_nascimento').eq('ativo', true).not('data_nascimento', 'is', null),
+    ]);
+
+    document.getElementById('num-func')!.textContent = String(funcRes.count ?? 0);
+    document.getElementById('num-metas')!.textContent = String(metasRes.count ?? 0);
+    document.getElementById('num-folgas')!.textContent = String(folgasRes.count ?? 0);
+    document.getElementById('num-produtos')!.textContent = String(prodRes.count ?? 0);
+
+    const anivList = document.getElementById('aniv-list')!;
+    const anivData = (anivRes.data ?? []).filter(f => {
+      if (!f.data_nascimento) return false;
+      const m = parseInt(f.data_nascimento.split('-')[1]);
+      return m === mes;
+    });
+
+    if (anivData.length === 0) {
+      anivList.innerHTML = '<div class="empty"><div class="empty-icon">🎂</div><div>Nenhum aniversário este mês</div></div>';
+    } else {
+      anivList.innerHTML = anivData.map(f => {
+        const day = f.data_nascimento!.split('-')[2];
+        return `<div style="display:flex;align-items:center;gap:.75rem;padding:.5rem 0;border-bottom:1px solid #e2e8f0">
+          <span style="font-size:1.25rem">🎂</span>
+          <div>
+            <div style="font-weight:500">${f.nome}</div>
+            <div style="font-size:.8rem;color:#64748b">Dia ${parseInt(day)}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  loadStats();
+</script>
+

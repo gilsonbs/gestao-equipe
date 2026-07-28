@@ -1,0 +1,211 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Metas" active="metas">
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-body" style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
+      <div class="form-group" style="margin:0;flex:1;min-width:140px">
+        <label class="form-label">Mês</label>
+        <select class="form-control" id="sel-mes">
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+          <option value="3">Março</option><option value="4">Abril</option>
+          <option value="5">Maio</option><option value="6">Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option>
+          <option value="9">Setembro</option><option value="10">Outubro</option>
+          <option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:100px">
+        <label class="form-label">Ano</label>
+        <input class="form-control" type="number" id="sel-ano" value={new Date().getFullYear()} min="2020" max="2100" />
+      </div>
+      <button class="btn btn-primary" id="btn-novo">+ Lançar Meta</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Funcionário</th>
+              <th>Meta (R$)</th>
+              <th>Realizado (R$)</th>
+              <th>%</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="6"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Lançar Meta</span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form">
+          <input type="hidden" id="meta-id" />
+          <div class="form-group">
+            <label class="form-label">Funcionário *</label>
+            <select class="form-control" id="funcionario_id" required>
+              <option value="">Selecione...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor da Meta (R$) *</label>
+            <input class="form-control" type="number" id="valor_meta" min="0" step="0.01" required placeholder="0,00" />
+          </div>
+          <p style="font-size:.8rem;color:#64748b;margin-bottom:1rem">
+            O valor realizado é lançado na tela de <strong>Vendas</strong>.
+          </p>
+          <div id="form-error" class="alert alert-danger" style="display:none"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  let editingId: string | null = null;
+  const selMes = document.getElementById('sel-mes') as HTMLSelectElement;
+  const selAno = document.getElementById('sel-ano') as HTMLInputElement;
+  selMes.value = String(new Date().getMonth() + 1);
+
+  async function load() {
+    const mes = parseInt(selMes.value);
+    const ano = parseInt(selAno.value);
+    const { data, error } = await supabase
+      .from('desempenho_mensal')
+      .select('*')
+      .eq('mes', mes).eq('ano', ano)
+      .not('meta_id', 'is', null)
+      .order('valor_meta', { ascending: false });
+
+    const tbody = document.getElementById('tbody')!;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-danger">Erro ao carregar metas: ${error.message}</div></td></tr>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">🎯</div>Nenhuma meta lançada para este período</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((m: any) => {
+      const pct = Number(m.percentual ?? 0);
+      const cls = pct >= 100 ? 'success' : pct >= 70 ? 'warning' : 'danger';
+      const badge = pct >= 100 ? 'badge-success' : pct >= 70 ? 'badge-warning' : 'badge-danger';
+      const label = pct >= 100 ? 'Atingida' : pct >= 70 ? 'Em progresso' : 'Abaixo';
+      return `<tr>
+        <td><strong>${m.nome ?? '—'}</strong></td>
+        <td>R$ ${Number(m.valor_meta).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td>R$ ${Number(m.valor_realizado).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td>
+          <div style="min-width:80px">
+            <div style="font-weight:600;margin-bottom:4px">${pct}%</div>
+            <div class="progress"><div class="progress-bar ${cls}" style="width:${Math.min(pct,100)}%"></div></div>
+          </div>
+        </td>
+        <td><span class="badge ${badge}">${label}</span></td>
+        <td style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="openEdit('${m.meta_id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteMeta('${m.meta_id}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function loadFuncionarios() {
+    const { data } = await supabase.from('funcionarios').select('id, nome').eq('ativo', true).order('nome');
+    const sel = document.getElementById('funcionario_id') as HTMLSelectElement;
+    (data ?? []).forEach((f: any) => {
+      const opt = document.createElement('option');
+      opt.value = f.id; opt.textContent = f.nome;
+      sel.appendChild(opt);
+    });
+  }
+
+  function openModal() { document.getElementById('modal')!.style.display = 'flex'; }
+  function closeModal() {
+    document.getElementById('modal')!.style.display = 'none';
+    (document.getElementById('form') as HTMLFormElement).reset();
+    document.getElementById('form-error')!.style.display = 'none';
+    editingId = null;
+  }
+
+  function mostrarErro(msg: string) {
+    const el = document.getElementById('form-error')!;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  document.getElementById('btn-novo')?.addEventListener('click', () => {
+    document.getElementById('modal-title')!.textContent = 'Lançar Meta';
+    editingId = null;
+    openModal();
+  });
+  document.getElementById('modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+  selMes.addEventListener('change', load);
+  selAno.addEventListener('change', load);
+
+  (window as any).openEdit = async (id: string) => {
+    const { data } = await supabase.from('metas').select('*').eq('id', id).single();
+    if (!data) return;
+    editingId = id;
+    document.getElementById('modal-title')!.textContent = 'Editar Meta';
+    (document.getElementById('funcionario_id') as HTMLSelectElement).value = data.funcionario_id;
+    (document.getElementById('valor_meta') as HTMLInputElement).value = data.valor_meta;
+    openModal();
+  };
+
+  (window as any).deleteMeta = async (id: string) => {
+    if (!confirm('Excluir esta meta?')) return;
+    const { error } = await supabase.from('metas').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir a meta: ' + error.message); return; }
+    load();
+  };
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const funcionario_id = (document.getElementById('funcionario_id') as HTMLSelectElement).value;
+    const valor_meta = parseFloat((document.getElementById('valor_meta') as HTMLInputElement).value);
+    const mes = parseInt(selMes.value);
+    const ano = parseInt(selAno.value);
+
+    if (!funcionario_id || isNaN(valor_meta)) {
+      mostrarErro('Preencha todos os campos obrigatórios.');
+      return;
+    }
+    document.getElementById('form-error')!.style.display = 'none';
+
+    const { error } = editingId
+      ? await supabase.from('metas').update({ funcionario_id, valor_meta, mes, ano }).eq('id', editingId)
+      : await supabase.from('metas').insert({ funcionario_id, valor_meta, mes, ano });
+
+    if (error) {
+      // 23505 = violação de UNIQUE(funcionario_id, mes, ano)
+      mostrarErro(error.code === '23505'
+        ? 'Este funcionário já tem uma meta lançada para este mês. Edite a meta existente.'
+        : 'Erro ao salvar a meta: ' + error.message);
+      return;
+    }
+    closeModal(); load();
+  });
+
+  loadFuncionarios(); load();
+</script>
+

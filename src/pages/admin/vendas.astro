@@ -1,0 +1,289 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Vendas" active="vendas">
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-body" style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
+      <div class="form-group" style="margin:0;flex:1;min-width:140px">
+        <label class="form-label">Mês</label>
+        <select class="form-control" id="sel-mes">
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+          <option value="3">Março</option><option value="4">Abril</option>
+          <option value="5">Maio</option><option value="6">Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option>
+          <option value="9">Setembro</option><option value="10">Outubro</option>
+          <option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:100px">
+        <label class="form-label">Ano</label>
+        <input class="form-control" type="number" id="sel-ano" value={new Date().getFullYear()} min="2020" />
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:1.5rem">
+    <!-- Vendas por Funcionário -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">👤 Vendas por Funcionário</span>
+        <button class="btn btn-primary btn-sm" id="btn-novo-func">+ Lançar</button>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Funcionário</th><th>Valor (R$)</th><th>Ações</th></tr>
+            </thead>
+            <tbody id="tbody-func">
+              <tr><td colspan="3"><div class="loading"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vendas da Loja -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🏪 Vendas da Loja</span>
+        <button class="btn btn-primary btn-sm" id="btn-novo-loja">+ Lançar</button>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Total (R$)</th><th>Ações</th></tr>
+            </thead>
+            <tbody id="tbody-loja">
+              <tr><td colspan="2"><div class="loading"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Funcionário -->
+  <div class="modal-backdrop" id="modal-func" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-func-title">Lançar Venda — Funcionário</span>
+        <button class="modal-close" onclick="closeModalFunc()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Funcionário *</label>
+          <select class="form-control" id="vf-func" required>
+            <option value="">Selecione...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor Total de Vendas (R$) *</label>
+          <input class="form-control" type="number" id="vf-valor" min="0" step="0.01" placeholder="0,00" />
+        </div>
+        <div id="vf-error" class="alert alert-danger" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModalFunc()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save-func">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Loja -->
+  <div class="modal-backdrop" id="modal-loja" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-loja-title">Lançar Vendas da Loja</span>
+        <button class="modal-close" onclick="closeModalLoja()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Valor Total de Vendas (R$) *</label>
+          <input class="form-control" type="number" id="vl-valor" min="0" step="0.01" placeholder="0,00" />
+        </div>
+        <div id="vl-error" class="alert alert-danger" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModalLoja()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save-loja">Salvar</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  let editingFuncId: string | null = null;
+  let editingLojaId: string | null = null;
+  const selMes = document.getElementById('sel-mes') as HTMLSelectElement;
+  const selAno = document.getElementById('sel-ano') as HTMLInputElement;
+  selMes.value = String(new Date().getMonth() + 1);
+
+  function getMesAno() {
+    return { mes: parseInt(selMes.value), ano: parseInt(selAno.value) };
+  }
+
+  async function loadFuncionarios() {
+    const { data } = await supabase.from('funcionarios').select('id, nome').eq('ativo', true).order('nome');
+    const sel = document.getElementById('vf-func') as HTMLSelectElement;
+    (data ?? []).forEach((f: any) => {
+      const opt = document.createElement('option');
+      opt.value = f.id; opt.textContent = f.nome;
+      sel.appendChild(opt);
+    });
+  }
+
+  async function loadVendasFunc() {
+    const { mes, ano } = getMesAno();
+    const { data, error } = await supabase
+      .from('vendas_funcionario')
+      .select('id, valor, funcionarios(nome)')
+      .eq('mes', mes).eq('ano', ano)
+      .order('valor', { ascending: false });
+
+    const tbody = document.getElementById('tbody-func')!;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="3"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3"><div class="empty"><div class="empty-icon">💰</div>Nenhuma venda lançada</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((v: any) => `
+      <tr>
+        <td>${(v.funcionarios as any)?.nome ?? '—'}</td>
+        <td>R$ ${Number(v.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="openEditFunc('${v.id}', ${v.valor})">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteVendaFunc('${v.id}')">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  async function loadVendasLoja() {
+    const { mes, ano } = getMesAno();
+    const { data, error } = await supabase.from('vendas_loja').select('*').eq('mes', mes).eq('ano', ano);
+    const tbody = document.getElementById('tbody-loja')!;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="2"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="2"><div class="empty"><div class="empty-icon">🏪</div>Nenhum lançamento</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((v: any) => `
+      <tr>
+        <td><strong>R$ ${Number(v.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong></td>
+        <td style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="openEditLoja('${v.id}', ${v.valor_total})">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteLoja('${v.id}')">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function load() { loadVendasFunc(); loadVendasLoja(); }
+
+  // Modal Funcionário
+  (window as any).closeModalFunc = () => {
+    document.getElementById('modal-func')!.style.display = 'none';
+    editingFuncId = null;
+  };
+  (window as any).openEditFunc = (id: string, valor: number) => {
+    editingFuncId = id;
+    document.getElementById('modal-func-title')!.textContent = 'Atualizar Vendas — Funcionário';
+    (document.getElementById('vf-valor') as HTMLInputElement).value = String(valor);
+    document.getElementById('modal-func')!.style.display = 'flex';
+  };
+  document.getElementById('btn-novo-func')?.addEventListener('click', () => {
+    editingFuncId = null;
+    document.getElementById('modal-func-title')!.textContent = 'Lançar Venda — Funcionário';
+    (document.getElementById('vf-valor') as HTMLInputElement).value = '';
+    document.getElementById('modal-func')!.style.display = 'flex';
+  });
+  document.getElementById('btn-save-func')?.addEventListener('click', async () => {
+    const { mes, ano } = getMesAno();
+    const funcionario_id = (document.getElementById('vf-func') as HTMLSelectElement).value;
+    const valor = parseFloat((document.getElementById('vf-valor') as HTMLInputElement).value);
+    const errorDiv = document.getElementById('vf-error')!;
+    if ((!funcionario_id && !editingFuncId) || isNaN(valor)) {
+      errorDiv.textContent = 'Preencha todos os campos.'; errorDiv.style.display = 'block'; return;
+    }
+    errorDiv.style.display = 'none';
+
+    // O UNIQUE(funcionario_id, mes, ano) permite usar upsert: lançar de novo
+    // no mesmo período sobrescreve o valor em vez de falhar.
+    const { error } = editingFuncId
+      ? await supabase.from('vendas_funcionario').update({ valor }).eq('id', editingFuncId)
+      : await supabase.from('vendas_funcionario')
+          .upsert({ funcionario_id, mes, ano, valor }, { onConflict: 'funcionario_id,mes,ano' });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
+    }
+    (window as any).closeModalFunc(); load();
+  });
+
+  (window as any).deleteVendaFunc = async (id: string) => {
+    if (!confirm('Excluir este lançamento de venda?')) return;
+    const { error } = await supabase.from('vendas_funcionario').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    loadVendasFunc();
+  };
+
+  // Modal Loja
+  (window as any).closeModalLoja = () => {
+    document.getElementById('modal-loja')!.style.display = 'none';
+    editingLojaId = null;
+  };
+  (window as any).openEditLoja = (id: string, valor: number) => {
+    editingLojaId = id;
+    document.getElementById('modal-loja-title')!.textContent = 'Editar Vendas da Loja';
+    (document.getElementById('vl-valor') as HTMLInputElement).value = String(valor);
+    document.getElementById('modal-loja')!.style.display = 'flex';
+  };
+  (window as any).deleteLoja = async (id: string) => {
+    if (!confirm('Excluir este lançamento?')) return;
+    const { error } = await supabase.from('vendas_loja').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    loadVendasLoja();
+  };
+  document.getElementById('btn-novo-loja')?.addEventListener('click', () => {
+    editingLojaId = null;
+    document.getElementById('modal-loja-title')!.textContent = 'Lançar Vendas da Loja';
+    (document.getElementById('vl-valor') as HTMLInputElement).value = '';
+    document.getElementById('modal-loja')!.style.display = 'flex';
+  });
+  document.getElementById('btn-save-loja')?.addEventListener('click', async () => {
+    const { mes, ano } = getMesAno();
+    const valor_total = parseFloat((document.getElementById('vl-valor') as HTMLInputElement).value);
+    const errorDiv = document.getElementById('vl-error')!;
+    if (isNaN(valor_total)) { errorDiv.textContent = 'Informe o valor.'; errorDiv.style.display = 'block'; return; }
+    errorDiv.style.display = 'none';
+
+    const { error } = editingLojaId
+      ? await supabase.from('vendas_loja').update({ valor_total }).eq('id', editingLojaId)
+      : await supabase.from('vendas_loja').insert({ mes, ano, valor_total });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
+    }
+    (window as any).closeModalLoja(); loadVendasLoja();
+  });
+
+  selMes.addEventListener('change', load);
+  selAno.addEventListener('change', load);
+
+  loadFuncionarios(); load();
+</script>
+
