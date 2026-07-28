@@ -1,0 +1,55 @@
+---
+import '../styles/global.css';
+const base = import.meta.env.BASE_URL;
+---
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Página não encontrada — Gestão de Equipe</title>
+  <link rel="icon" href={`${base}favicon.svg`} />
+</head>
+<body class="nf-body">
+  <div class="nf-card">
+    <div class="nf-icon">🔍</div>
+    <h1>Página não encontrada</h1>
+    <p>O endereço que você acessou não existe ou foi movido.</p>
+    <div class="nf-actions">
+      <a href={base} class="btn btn-primary">Ir para o Dashboard</a>
+      <a href={`${base}admin/`} class="btn btn-ghost">Painel Admin</a>
+    </div>
+  </div>
+
+<style>
+  body.nf-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1e3a8a 0%, #0f766e 100%);
+    padding: 1rem;
+  }
+  .nf-card {
+    background: #fff;
+    border-radius: 1rem;
+    box-shadow: 0 20px 40px rgba(0,0,0,.2);
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+  }
+  .nf-icon { font-size: 3rem; margin-bottom: .75rem; }
+  .nf-card h1 { font-size: 1.35rem; font-weight: 700; color: #1e293b; }
+  .nf-card p { font-size: .9rem; color: #64748b; margin-top: .5rem; }
+  .nf-actions {
+    display: flex;
+    gap: .5rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .nf-actions .btn { text-decoration: none; }
+</style>
+</body>
+</html>
