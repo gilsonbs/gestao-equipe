@@ -1,0 +1,158 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Funcionários" active="funcionarios">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
+    <button class="btn btn-primary" id="btn-novo">+ Novo Funcionário</button>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Cargo</th>
+              <th>Aniversário</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="5"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Novo Funcionário</span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form">
+          <input type="hidden" id="func-id" />
+          <div class="form-group">
+            <label class="form-label">Nome *</label>
+            <input class="form-control" id="nome" required placeholder="Nome completo" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cargo</label>
+            <input class="form-control" id="cargo" placeholder="Ex: Farmacêutico, Atendente..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data de Nascimento</label>
+            <input class="form-control" type="date" id="data_nascimento" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-control" id="ativo">
+              <option value="true">Ativo</option>
+              <option value="false">Inativo</option>
+            </select>
+          </div>
+          <div id="form-error" class="alert alert-danger" style="display:none"></div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  type Func = { id: string; nome: string; cargo: string | null; data_nascimento: string | null; ativo: boolean };
+  let editingId: string | null = null;
+
+  async function load() {
+    const { data } = await supabase.from('funcionarios').select('*').order('nome');
+    const tbody = document.getElementById('tbody')!;
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="empty-icon">👤</div>Nenhum funcionário cadastrado</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((f: Func) => `
+      <tr>
+        <td><strong>${f.nome}</strong></td>
+        <td>${f.cargo ?? '—'}</td>
+        <td>${f.data_nascimento ? formatDate(f.data_nascimento) : '—'}</td>
+        <td><span class="badge ${f.ativo ? 'badge-success' : 'badge-danger'}">${f.ativo ? 'Ativo' : 'Inativo'}</span></td>
+        <td style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="openEdit('${f.id}')">✏️ Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteFunc('${f.id}')">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function formatDate(d: string) {
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  }
+
+  function openModal() { document.getElementById('modal')!.style.display = 'flex'; }
+  function closeModal() {
+    document.getElementById('modal')!.style.display = 'none';
+    (document.getElementById('form') as HTMLFormElement).reset();
+    (document.getElementById('func-id') as HTMLInputElement).value = '';
+    document.getElementById('form-error')!.style.display = 'none';
+    editingId = null;
+  }
+
+  document.getElementById('btn-novo')?.addEventListener('click', () => {
+    document.getElementById('modal-title')!.textContent = 'Novo Funcionário';
+    editingId = null;
+    openModal();
+  });
+  document.getElementById('modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+
+  (window as any).openEdit = async (id: string) => {
+    const { data } = await supabase.from('funcionarios').select('*').eq('id', id).single();
+    if (!data) return;
+    editingId = id;
+    document.getElementById('modal-title')!.textContent = 'Editar Funcionário';
+    (document.getElementById('nome') as HTMLInputElement).value = data.nome;
+    (document.getElementById('cargo') as HTMLInputElement).value = data.cargo ?? '';
+    (document.getElementById('data_nascimento') as HTMLInputElement).value = data.data_nascimento ?? '';
+    (document.getElementById('ativo') as HTMLSelectElement).value = String(data.ativo);
+    openModal();
+  };
+
+  (window as any).deleteFunc = async (id: string) => {
+    if (!confirm('Excluir este funcionário?')) return;
+    await supabase.from('funcionarios').delete().eq('id', id);
+    load();
+  };
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const nome = (document.getElementById('nome') as HTMLInputElement).value.trim();
+    const cargo = (document.getElementById('cargo') as HTMLInputElement).value.trim() || null;
+    const data_nascimento = (document.getElementById('data_nascimento') as HTMLInputElement).value || null;
+    const ativo = (document.getElementById('ativo') as HTMLSelectElement).value === 'true';
+    const errorDiv = document.getElementById('form-error')!;
+
+    if (!nome) { errorDiv.textContent = 'Nome é obrigatório.'; errorDiv.style.display = 'block'; return; }
+    errorDiv.style.display = 'none';
+
+    if (editingId) {
+      await supabase.from('funcionarios').update({ nome, cargo, data_nascimento, ativo }).eq('id', editingId);
+    } else {
+      await supabase.from('funcionarios').insert({ nome, cargo, data_nascimento, ativo });
+    }
+    closeModal();
+    load();
+  });
+
+  load();
+</script>
+

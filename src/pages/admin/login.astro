@@ -1,0 +1,113 @@
+---
+import '../../styles/global.css';
+const base = import.meta.env.BASE_URL;
+---
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Admin</title>
+  <link rel="icon" href={`${base}favicon.svg`} />
+</head>
+<body class="login-body">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="login-icon">💊</div>
+      <h1>Gestão de Equipe</h1>
+      <p>Painel Administrativo</p>
+    </div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="email">E-mail</label>
+        <input class="form-control" type="email" id="email" required autocomplete="email" placeholder="seu@email.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Senha</label>
+        <input class="form-control" type="password" id="password" required autocomplete="current-password" placeholder="••••••••" />
+      </div>
+      <div id="error-msg" class="alert alert-danger" style="display:none"></div>
+      <button class="btn btn-primary" type="submit" style="width:100%" id="btn-submit">
+        Entrar
+      </button>
+    </form>
+  </div>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  // Already logged in → redirect
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) window.location.href = import.meta.env.BASE_URL + 'admin/';
+  });
+
+  const form = document.getElementById('login-form') as HTMLFormElement;
+  const errorMsg = document.getElementById('error-msg') as HTMLDivElement;
+  const btnSubmit = document.getElementById('btn-submit') as HTMLButtonElement;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorMsg.style.display = 'none';
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = 'Entrando...';
+
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const password = (document.getElementById('password') as HTMLInputElement).value;
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      errorMsg.textContent = 'E-mail ou senha incorretos.';
+      errorMsg.style.display = 'block';
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Entrar';
+    } else {
+      window.location.href = import.meta.env.BASE_URL + 'admin/';
+    }
+  });
+</script>
+
+<style>
+  body.login-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1e3a8a 0%, #0f766e 100%);
+  }
+
+  .login-card {
+    background: #fff;
+    border-radius: 1rem;
+    box-shadow: 0 20px 40px rgba(0,0,0,.2);
+    padding: 2rem;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .login-header {
+    text-align: center;
+    margin-bottom: 1.75rem;
+  }
+
+  .login-icon {
+    font-size: 2.5rem;
+    margin-bottom: .5rem;
+  }
+
+  .login-header h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  .login-header p {
+    font-size: .875rem;
+    color: #64748b;
+    margin-top: .25rem;
+  }
+</style>
+</body>
+</html>
+

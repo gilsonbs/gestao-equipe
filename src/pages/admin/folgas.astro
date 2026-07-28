@@ -1,0 +1,206 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Folgas & Férias" active="folgas">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem">
+    <div style="display:flex;gap:.5rem">
+      <button class="btn btn-ghost btn-sm filter-btn active" data-tipo="">Todos</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-tipo="folga">Folgas</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-tipo="ferias">Férias</button>
+    </div>
+    <button class="btn btn-primary" id="btn-novo">+ Agendar</button>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Funcionário</th>
+              <th>Tipo</th>
+              <th>Início</th>
+              <th>Fim</th>
+              <th>Dias</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="6"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Agendar Folga/Férias</span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Funcionário *</label>
+          <select class="form-control" id="funcionario_id" required><option value="">Selecione...</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo *</label>
+          <select class="form-control" id="tipo">
+            <option value="folga">Folga</option>
+            <option value="ferias">Férias</option>
+          </select>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Data Início *</label>
+            <input class="form-control" type="date" id="data_inicio" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data Fim *</label>
+            <input class="form-control" type="date" id="data_fim" required />
+          </div>
+        </div>
+        <div id="form-error" class="alert alert-danger" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  let editingId: string | null = null;
+  let currentFilter = '';
+
+  async function load() {
+    let query = supabase
+      .from('folgas')
+      .select('*, funcionarios(nome)')
+      .order('data_inicio', { ascending: false });
+    if (currentFilter) query = query.eq('tipo', currentFilter);
+    const { data } = await query;
+
+    const tbody = document.getElementById('tbody')!;
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">📅</div>Nenhum registro encontrado</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((f: any) => {
+      const inicio = new Date(f.data_inicio + 'T00:00:00');
+      const fim = new Date(f.data_fim + 'T00:00:00');
+      const dias = Math.round((fim.getTime() - inicio.getTime()) / 86400000) + 1;
+      const badge = f.tipo === 'ferias' ? 'badge-info' : 'badge-warning';
+      const label = f.tipo === 'ferias' ? '🏖️ Férias' : '📋 Folga';
+      return `<tr>
+        <td><strong>${f.funcionarios?.nome ?? '—'}</strong></td>
+        <td><span class="badge ${badge}">${label}</span></td>
+        <td>${formatDate(f.data_inicio)}</td>
+        <td>${formatDate(f.data_fim)}</td>
+        <td>${dias} dia${dias > 1 ? 's' : ''}</td>
+        <td style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="openEdit('${f.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteFolga('${f.id}')">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function formatDate(d: string) {
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  }
+
+  async function loadFuncionarios() {
+    const { data } = await supabase.from('funcionarios').select('id, nome').eq('ativo', true).order('nome');
+    const sel = document.getElementById('funcionario_id') as HTMLSelectElement;
+    (data ?? []).forEach((f: any) => {
+      const opt = document.createElement('option');
+      opt.value = f.id; opt.textContent = f.nome;
+      sel.appendChild(opt);
+    });
+  }
+
+  function openModal() { document.getElementById('modal')!.style.display = 'flex'; }
+  function closeModal() {
+    document.getElementById('modal')!.style.display = 'none';
+    (document.getElementById('form-error') as HTMLElement).style.display = 'none';
+    editingId = null;
+  }
+
+  document.getElementById('btn-novo')?.addEventListener('click', () => {
+    document.getElementById('modal-title')!.textContent = 'Agendar Folga/Férias';
+    (document.getElementById('funcionario_id') as HTMLSelectElement).value = '';
+    (document.getElementById('tipo') as HTMLSelectElement).value = 'folga';
+    (document.getElementById('data_inicio') as HTMLInputElement).value = '';
+    (document.getElementById('data_fim') as HTMLInputElement).value = '';
+    editingId = null;
+    openModal();
+  });
+  document.getElementById('modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+
+  (window as any).openEdit = async (id: string) => {
+    const { data } = await supabase.from('folgas').select('*').eq('id', id).single();
+    if (!data) return;
+    editingId = id;
+    document.getElementById('modal-title')!.textContent = 'Editar Folga/Férias';
+    (document.getElementById('funcionario_id') as HTMLSelectElement).value = data.funcionario_id;
+    (document.getElementById('tipo') as HTMLSelectElement).value = data.tipo;
+    (document.getElementById('data_inicio') as HTMLInputElement).value = data.data_inicio;
+    (document.getElementById('data_fim') as HTMLInputElement).value = data.data_fim;
+    openModal();
+  };
+
+  (window as any).deleteFolga = async (id: string) => {
+    if (!confirm('Excluir este registro?')) return;
+    await supabase.from('folgas').delete().eq('id', id);
+    load();
+  };
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const funcionario_id = (document.getElementById('funcionario_id') as HTMLSelectElement).value;
+    const tipo = (document.getElementById('tipo') as HTMLSelectElement).value;
+    const data_inicio = (document.getElementById('data_inicio') as HTMLInputElement).value;
+    const data_fim = (document.getElementById('data_fim') as HTMLInputElement).value;
+    const errorDiv = document.getElementById('form-error')!;
+
+    if (!funcionario_id || !data_inicio || !data_fim) {
+      errorDiv.textContent = 'Preencha todos os campos obrigatórios.';
+      errorDiv.style.display = 'block'; return;
+    }
+    if (data_fim < data_inicio) {
+      errorDiv.textContent = 'Data fim deve ser igual ou após a data início.';
+      errorDiv.style.display = 'block'; return;
+    }
+    errorDiv.style.display = 'none';
+
+    if (editingId) {
+      await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim }).eq('id', editingId);
+    } else {
+      await supabase.from('folgas').insert({ funcionario_id, tipo, data_inicio, data_fim });
+    }
+    closeModal(); load();
+  });
+
+  // Filters
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = (btn as HTMLElement).dataset.tipo ?? '';
+      load();
+    });
+  });
+
+  loadFuncionarios(); load();
+</script>
+
+<style>
+  .filter-btn.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+</style>
+

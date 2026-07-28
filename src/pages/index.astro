@@ -1,0 +1,449 @@
+---
+import '../styles/global.css';
+const base = import.meta.env.BASE_URL;
+const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const now = new Date();
+const mesAtual = now.getMonth() + 1;
+const anoAtual = now.getFullYear();
+---
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Gestão de Equipe</title>
+  <link rel="icon" href={`${base}favicon.svg`} />
+</head>
+<body>
+
+<header class="top-bar">
+  <div class="top-bar-inner">
+    <div class="brand">
+      <span class="brand-icon">💊</span>
+      <div>
+        <div class="brand-title">Gestão de Equipe</div>
+        <div class="brand-sub">Dashboard Interno</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="month-selector">
+        <select id="sel-mes" class="form-control" style="display:inline-block;width:auto">
+          {MESES.slice(1).map((m, i) => (
+            <option value={i + 1} selected={i + 1 === mesAtual}>{m}</option>
+          ))}
+        </select>
+        <input type="number" id="sel-ano" class="form-control" value={anoAtual}
+          style="display:inline-block;width:90px" min="2020" max="2100" />
+      </div>
+      <a href={`${base}admin/`} class="btn btn-ghost btn-sm">⚙️ Admin</a>
+    </div>
+  </div>
+</header>
+
+<main class="dashboard">
+
+  <!-- Stats Row -->
+  <section class="grid-4 section" id="stats-row">
+    <div class="stat-card" id="stat-vendas-loja">
+      <div class="stat-label">Vendas da Loja</div>
+      <div class="stat-value loading-val">—</div>
+      <div class="stat-sub">este mês</div>
+    </div>
+    <div class="stat-card" id="stat-total-metas">
+      <div class="stat-label">Funcionários com Meta</div>
+      <div class="stat-value loading-val">—</div>
+      <div class="stat-sub">lançadas este mês</div>
+    </div>
+    <div class="stat-card" id="stat-media-metas">
+      <div class="stat-label">Atingimento Médio</div>
+      <div class="stat-value loading-val">—</div>
+      <div class="stat-sub">de metas este mês</div>
+    </div>
+    <div class="stat-card" id="stat-folgas">
+      <div class="stat-label">Folgas/Férias</div>
+      <div class="stat-value loading-val">—</div>
+      <div class="stat-sub">agendadas este mês</div>
+    </div>
+  </section>
+
+  <div class="grid-2 section">
+    <!-- Metas dos Funcionários -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🎯 Metas dos Funcionários</span>
+        <span id="metas-periodo" style="font-size:.8rem;color:#64748b"></span>
+      </div>
+      <div class="card-body" id="metas-body">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+
+    <!-- Aniversários -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🎂 Aniversários do Mês</span>
+      </div>
+      <div class="card-body" id="aniv-body">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2 section">
+    <!-- Calendário de Folgas -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📅 Folgas & Férias</span>
+        <div style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm filter-tipo active" data-tipo="">Todos</button>
+          <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="folga">Folgas</button>
+          <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="ferias">Férias</button>
+        </div>
+      </div>
+      <div class="card-body" id="folgas-body">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+
+    <!-- Vendas por Funcionário -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">💰 Vendas por Funcionário</span>
+        <span id="vendas-periodo" style="font-size:.8rem;color:#64748b"></span>
+      </div>
+      <div class="card-body" id="vendas-body">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Produtos -->
+  <section class="card section">
+    <div class="card-header">
+      <span class="card-title">💊 Top Produtos</span>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <input class="form-control" id="busca-prod" placeholder="🔍 Nome ou substância..." style="width:220px" />
+        <select class="form-control" id="prod-mes" style="width:auto">
+          <option value="">Todos os meses</option>
+          {MESES.slice(1).map((m, i) => (
+            <option value={i + 1}>{m}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+    <div class="card-body" id="produtos-body">
+      <div class="loading"><div class="spinner"></div> Carregando...</div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  import { supabase } from '../lib/supabase';
+
+  const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const MESES_SHORT = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  const selMes = document.getElementById('sel-mes') as HTMLSelectElement;
+  const selAno = document.getElementById('sel-ano') as HTMLInputElement;
+
+  function getMes() { return parseInt(selMes.value); }
+  function getAno() { return parseInt(selAno.value); }
+
+  // ===== STATS =====
+  async function loadStats() {
+    const mes = getMes(); const ano = getAno();
+    const prefix = `${ano}-${String(mes).padStart(2,'0')}`;
+    const [lojaRes, metasRes, folgasRes] = await Promise.all([
+      supabase.from('vendas_loja').select('valor_total').eq('mes', mes).eq('ano', ano),
+      supabase.from('metas').select('valor_meta, valor_realizado').eq('mes', mes).eq('ano', ano),
+      supabase.from('folgas').select('id').gte('data_inicio', `${prefix}-01`).lte('data_inicio', `${prefix}-31`),
+    ]);
+
+    const totalLoja = (lojaRes.data ?? []).reduce((s: number, v: any) => s + Number(v.valor_total), 0);
+    document.getElementById('stat-vendas-loja')!.querySelector('.stat-value')!.textContent =
+      totalLoja > 0 ? `R$ ${totalLoja.toLocaleString('pt-BR', {minimumFractionDigits:2})}` : 'R$ 0,00';
+
+    const metas = metasRes.data ?? [];
+    document.getElementById('stat-total-metas')!.querySelector('.stat-value')!.textContent = String(metas.length);
+
+    const media = metas.length > 0
+      ? Math.round(metas.reduce((s: number, m: any) =>
+          s + (m.valor_meta > 0 ? (m.valor_realizado / m.valor_meta) * 100 : 0), 0) / metas.length)
+      : 0;
+    const mediaEl = document.getElementById('stat-media-metas')!.querySelector('.stat-value')!;
+    mediaEl.textContent = `${media}%`;
+    mediaEl.style.color = media >= 100 ? 'var(--color-success)' : media >= 70 ? 'var(--color-warning)' : 'var(--color-danger)';
+
+    document.getElementById('stat-folgas')!.querySelector('.stat-value')!.textContent =
+      String((folgasRes.count ?? folgasRes.data?.length ?? 0));
+  }
+
+  // ===== METAS =====
+  async function loadMetas() {
+    const mes = getMes(); const ano = getAno();
+    document.getElementById('metas-periodo')!.textContent = `${MESES[mes]} ${ano}`;
+    const { data } = await supabase
+      .from('metas')
+      .select('*, funcionarios(nome, cargo)')
+      .eq('mes', mes).eq('ano', ano)
+      .order('valor_meta', { ascending: false });
+
+    const body = document.getElementById('metas-body')!;
+    if (!data || data.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div>Nenhuma meta lançada para este período</div>';
+      return;
+    }
+    body.innerHTML = data.map((m: any) => {
+      const pct = m.valor_meta > 0 ? Math.min(Math.round((m.valor_realizado / m.valor_meta) * 100), 100) : 0;
+      const pctReal = m.valor_meta > 0 ? Math.round((m.valor_realizado / m.valor_meta) * 100) : 0;
+      const cls = pctReal >= 100 ? 'success' : pctReal >= 70 ? 'warning' : 'danger';
+      const color = pctReal >= 100 ? 'var(--color-success)' : pctReal >= 70 ? 'var(--color-warning)' : 'var(--color-danger)';
+      return `<div style="margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
+          <div>
+            <span style="font-weight:600">${m.funcionarios?.nome ?? '—'}</span>
+            ${m.funcionarios?.cargo ? `<span style="font-size:.75rem;color:#64748b;margin-left:.5rem">${m.funcionarios.cargo}</span>` : ''}
+          </div>
+          <span style="font-weight:700;color:${color}">${pctReal}%</span>
+        </div>
+        <div class="progress" style="margin-bottom:.3rem">
+          <div class="progress-bar ${cls}" style="width:${pct}%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#64748b">
+          <span>Realizado: R$ ${Number(m.valor_realizado).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+          <span>Meta: R$ ${Number(m.valor_meta).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ===== ANIVERSÁRIOS =====
+  async function loadAniversarios() {
+    const mes = getMes();
+    const { data } = await supabase
+      .from('funcionarios')
+      .select('nome, cargo, data_nascimento')
+      .eq('ativo', true)
+      .not('data_nascimento', 'is', null);
+
+    const body = document.getElementById('aniv-body')!;
+    const aniv = (data ?? [])
+      .filter((f: any) => f.data_nascimento && parseInt(f.data_nascimento.split('-')[1]) === mes)
+      .sort((a: any, b: any) => parseInt(a.data_nascimento.split('-')[2]) - parseInt(b.data_nascimento.split('-')[2]));
+
+    const hoje = new Date();
+    if (aniv.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">🎂</div>Nenhum aniversário este mês</div>';
+      return;
+    }
+    body.innerHTML = aniv.map((f: any) => {
+      const day = parseInt(f.data_nascimento.split('-')[2]);
+      const birth = new Date(hoje.getFullYear(), mes - 1, day);
+      const isToday = birth.getDate() === hoje.getDate() && birth.getMonth() === hoje.getMonth();
+      const isPast = birth < hoje && !isToday;
+      return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid #e2e8f0">
+        <div style="font-size:1.5rem;min-width:2rem;text-align:center">${isToday ? '🎉' : isPast ? '🎂' : '🎂'}</div>
+        <div style="flex:1">
+          <div style="font-weight:600${isToday ? ';color:var(--color-success)' : ''}">${f.nome}${isToday ? ' — Hoje! 🎉' : ''}</div>
+          <div style="font-size:.75rem;color:#64748b">${f.cargo ?? ''} · Dia ${day}</div>
+        </div>
+        ${isToday ? '<span class="badge badge-success">Hoje</span>' : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // ===== FOLGAS =====
+  let folgaFilter = '';
+  async function loadFolgas() {
+    const mes = getMes(); const ano = getAno();
+    const prefix = `${ano}-${String(mes).padStart(2,'0')}`;
+    let query = supabase
+      .from('folgas')
+      .select('*, funcionarios(nome)')
+      .or(`data_inicio.gte.${prefix}-01,data_fim.gte.${prefix}-01`)
+      .lte('data_inicio', `${prefix}-31`)
+      .order('data_inicio');
+    if (folgaFilter) query = query.eq('tipo', folgaFilter);
+    const { data } = await query;
+
+    const body = document.getElementById('folgas-body')!;
+    if (!data || data.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">📅</div>Nenhuma folga ou férias agendada</div>';
+      return;
+    }
+    body.innerHTML = `<div style="display:flex;flex-direction:column;gap:.5rem">` + data.map((f: any) => {
+      const inicio = new Date(f.data_inicio + 'T00:00:00');
+      const fim = new Date(f.data_fim + 'T00:00:00');
+      const dias = Math.round((fim.getTime() - inicio.getTime()) / 86400000) + 1;
+      const badge = f.tipo === 'ferias' ? 'badge-info' : 'badge-warning';
+      const icon = f.tipo === 'ferias' ? '🏖️' : '📋';
+      return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem;background:#f8fafc;border-radius:.5rem;border:1px solid #e2e8f0">
+        <span style="font-size:1.25rem">${icon}</span>
+        <div style="flex:1">
+          <div style="font-weight:600">${f.funcionarios?.nome ?? '—'}</div>
+          <div style="font-size:.75rem;color:#64748b">
+            ${formatDate(f.data_inicio)} → ${formatDate(f.data_fim)} · ${dias} dia${dias>1?'s':''}
+          </div>
+        </div>
+        <span class="badge ${badge}">${f.tipo === 'ferias' ? 'Férias' : 'Folga'}</span>
+      </div>`;
+    }).join('') + '</div>';
+  }
+
+  function formatDate(d: string) {
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  }
+
+  document.querySelectorAll('.filter-tipo').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-tipo').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      folgaFilter = (btn as HTMLElement).dataset.tipo ?? '';
+      loadFolgas();
+    });
+  });
+
+  // ===== VENDAS =====
+  async function loadVendas() {
+    const mes = getMes(); const ano = getAno();
+    document.getElementById('vendas-periodo')!.textContent = `${MESES[mes]} ${ano}`;
+    const { data } = await supabase
+      .from('metas')
+      .select('valor_realizado, funcionarios(nome)')
+      .eq('mes', mes).eq('ano', ano)
+      .gt('valor_realizado', 0)
+      .order('valor_realizado', { ascending: false });
+
+    const body = document.getElementById('vendas-body')!;
+    if (!data || data.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">💰</div>Nenhuma venda lançada</div>';
+      return;
+    }
+    const maxVal = Math.max(...data.map((v: any) => Number(v.valor_realizado)));
+    body.innerHTML = data.map((v: any, i: number) => {
+      const pct = maxVal > 0 ? Math.round((v.valor_realizado / maxVal) * 100) : 0;
+      const colors = ['var(--color-primary)','var(--color-secondary)','#7c3aed','#dc2626','#d97706'];
+      const color = colors[i % colors.length];
+      return `<div style="margin-bottom:.75rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
+          <span style="font-weight:500">${(v.funcionarios as any)?.nome ?? '—'}</span>
+          <span style="font-weight:600">R$ ${Number(v.valor_realizado).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+        </div>
+        <div class="progress">
+          <div class="progress-bar" style="width:${pct}%;background:${color}"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ===== TOP PRODUTOS =====
+  let allProdutos: any[] = [];
+  async function loadProdutos() {
+    const { data } = await supabase
+      .from('produtos_top')
+      .select('*')
+      .order('quantidade', { ascending: false, nullsFirst: false });
+    allProdutos = data ?? [];
+    renderProdutos();
+  }
+
+  function renderProdutos() {
+    const q = (document.getElementById('busca-prod') as HTMLInputElement).value.toLowerCase().trim();
+    const mesFilter = (document.getElementById('prod-mes') as HTMLSelectElement).value;
+    let filtered = allProdutos;
+    if (q) filtered = filtered.filter(p => p.nome?.toLowerCase().includes(q) || p.substancia?.toLowerCase().includes(q));
+    if (mesFilter) filtered = filtered.filter(p => String(p.mes) === mesFilter);
+
+    const body = document.getElementById('produtos-body')!;
+    if (filtered.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">💊</div>Nenhum produto encontrado</div>';
+      return;
+    }
+
+    body.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>Nome</th><th>Substância</th><th>Categoria</th><th>Quantidade</th><th>Período</th></tr></thead>
+      <tbody>
+        ${filtered.slice(0, 50).map((p, i) => `
+          <tr>
+            <td><strong>#${i+1}</strong></td>
+            <td><strong>${p.nome}</strong></td>
+            <td>${p.substancia ?? '—'}</td>
+            <td>${p.categoria ? `<span class="badge badge-info">${p.categoria}</span>` : '—'}</td>
+            <td>${p.quantidade ?? '—'}</td>
+            <td>${p.mes ? `${MESES_SHORT[p.mes]}/${p.ano}` : '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table></div>`;
+  }
+
+  let searchTimer: ReturnType<typeof setTimeout>;
+  document.getElementById('busca-prod')?.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderProdutos, 200);
+  });
+  document.getElementById('prod-mes')?.addEventListener('change', renderProdutos);
+
+  // ===== LOAD ALL =====
+  function loadAll() {
+    loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos();
+  }
+
+  selMes.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); });
+  selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); });
+
+  loadAll();
+</script>
+
+<style>
+  .top-bar {
+    background: #1e3a8a;
+    color: #fff;
+    padding: .75rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .top-bar-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: .75rem; }
+  .brand-icon { font-size: 1.75rem; }
+  .brand-title { font-weight: 700; font-size: 1rem; }
+  .brand-sub { font-size: .75rem; opacity: .7; }
+  .header-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .month-selector { display: flex; align-items: center; gap: .5rem; }
+  .month-selector .form-control {
+    background: rgba(255,255,255,.15);
+    border-color: rgba(255,255,255,.3);
+    color: #fff;
+  }
+  .month-selector .form-control option { background: #1e3a8a; }
+
+  .dashboard {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+  }
+  .section { margin-bottom: 1.5rem; }
+
+  .filter-tipo.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+
+  @media (max-width: 600px) {
+    .top-bar-inner { flex-direction: column; align-items: flex-start; }
+    .header-right { width: 100%; }
+  }
+</style>
+</body>
+</html>
+
