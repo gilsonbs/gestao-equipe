@@ -1,10 +1,12 @@
 -- =============================================
 -- Schema: Gestão de Equipe
--- Execute no Supabase SQL Editor
+-- Execute no Supabase SQL Editor em um banco NOVO.
 --
--- ATENÇÃO: se você já executou uma versão anterior deste schema,
--- rode antes: DROP VIEW IF EXISTS desempenho_mensal;
---             DROP TABLE IF EXISTS metas CASCADE;
+-- ATENÇÃO: se você já executou uma versão anterior deste schema, NÃO
+-- rode este arquivo — ele não migra nada, e recriar as tabelas apagaria
+-- os dados já lançados. Use migrations/001-separa-metas-vendas.sql.
+--
+-- Em dúvida sobre a versão do seu banco? Rode migrations/diagnostico.sql.
 -- =============================================
 
 -- Funcionários

@@ -25,8 +25,13 @@ Crie um projeto em [supabase.com](https://supabase.com), abra o **SQL Editor**
 e execute o conteúdo de [`schema.sql`](./schema.sql). Isso cria as tabelas, a
 view de desempenho, as políticas de RLS e os índices.
 
-> Se você já executou uma versão anterior do schema, leia o cabeçalho do
-> arquivo: ele indica os `DROP` necessários antes de rodar de novo.
+> **Já rodou uma versão anterior do schema?** Não execute o `schema.sql` de
+> novo — isso apagaria os dados. Rode
+> [`migrations/001-separa-metas-vendas.sql`](./migrations/001-separa-metas-vendas.sql),
+> que converte o banco preservando o que já foi lançado.
+>
+> Para descobrir em que versão o banco está, veja
+> [`migrations/diagnostico.sql`](./migrations/diagnostico.sql).
 
 ### 2. Criar o usuário administrador
 
