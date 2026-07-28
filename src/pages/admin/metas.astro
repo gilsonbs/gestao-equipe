@@ -64,10 +64,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
             <label class="form-label">Valor da Meta (R$) *</label>
             <input class="form-control" type="number" id="valor_meta" min="0" step="0.01" required placeholder="0,00" />
           </div>
-          <div class="form-group">
-            <label class="form-label">Valor Realizado (R$)</label>
-            <input class="form-control" type="number" id="valor_realizado" min="0" step="0.01" placeholder="0,00" value="0" />
-          </div>
+          <p style="font-size:.8rem;color:#64748b;margin-bottom:1rem">
+            O valor realizado é lançado na tela de <strong>Vendas</strong>.
+          </p>
           <div id="form-error" class="alert alert-danger" style="display:none"></div>
         </form>
       </div>
@@ -90,24 +89,29 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   async function load() {
     const mes = parseInt(selMes.value);
     const ano = parseInt(selAno.value);
-    const { data } = await supabase
-      .from('metas')
-      .select('*, funcionarios(nome)')
+    const { data, error } = await supabase
+      .from('desempenho_mensal')
+      .select('*')
       .eq('mes', mes).eq('ano', ano)
-      .order('created_at', { ascending: false });
+      .not('meta_id', 'is', null)
+      .order('valor_meta', { ascending: false });
 
     const tbody = document.getElementById('tbody')!;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="alert alert-danger">Erro ao carregar metas: ${error.message}</div></td></tr>`;
+      return;
+    }
     if (!data || data.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">🎯</div>Nenhuma meta lançada para este período</div></td></tr>';
       return;
     }
     tbody.innerHTML = data.map((m: any) => {
-      const pct = m.valor_meta > 0 ? Math.round((m.valor_realizado / m.valor_meta) * 100) : 0;
+      const pct = Number(m.percentual ?? 0);
       const cls = pct >= 100 ? 'success' : pct >= 70 ? 'warning' : 'danger';
       const badge = pct >= 100 ? 'badge-success' : pct >= 70 ? 'badge-warning' : 'badge-danger';
       const label = pct >= 100 ? 'Atingida' : pct >= 70 ? 'Em progresso' : 'Abaixo';
       return `<tr>
-        <td><strong>${m.funcionarios?.nome ?? '—'}</strong></td>
+        <td><strong>${m.nome ?? '—'}</strong></td>
         <td>R$ ${Number(m.valor_meta).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
         <td>R$ ${Number(m.valor_realizado).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
         <td>
@@ -118,8 +122,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         </td>
         <td><span class="badge ${badge}">${label}</span></td>
         <td style="display:flex;gap:.5rem">
-          <button class="btn btn-ghost btn-sm" onclick="openEdit('${m.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteMeta('${m.id}')">🗑️</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEdit('${m.meta_id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteMeta('${m.meta_id}')">🗑️</button>
         </td>
       </tr>`;
     }).join('');
@@ -140,8 +144,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     document.getElementById('modal')!.style.display = 'none';
     (document.getElementById('form') as HTMLFormElement).reset();
     document.getElementById('form-error')!.style.display = 'none';
-    (document.getElementById('valor_realizado') as HTMLInputElement).value = '0';
     editingId = null;
+  }
+
+  function mostrarErro(msg: string) {
+    const el = document.getElementById('form-error')!;
+    el.textContent = msg;
+    el.style.display = 'block';
   }
 
   document.getElementById('btn-novo')?.addEventListener('click', () => {
@@ -161,34 +170,38 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     document.getElementById('modal-title')!.textContent = 'Editar Meta';
     (document.getElementById('funcionario_id') as HTMLSelectElement).value = data.funcionario_id;
     (document.getElementById('valor_meta') as HTMLInputElement).value = data.valor_meta;
-    (document.getElementById('valor_realizado') as HTMLInputElement).value = data.valor_realizado;
     openModal();
   };
 
   (window as any).deleteMeta = async (id: string) => {
     if (!confirm('Excluir esta meta?')) return;
-    await supabase.from('metas').delete().eq('id', id);
+    const { error } = await supabase.from('metas').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir a meta: ' + error.message); return; }
     load();
   };
 
   document.getElementById('btn-save')?.addEventListener('click', async () => {
     const funcionario_id = (document.getElementById('funcionario_id') as HTMLSelectElement).value;
     const valor_meta = parseFloat((document.getElementById('valor_meta') as HTMLInputElement).value);
-    const valor_realizado = parseFloat((document.getElementById('valor_realizado') as HTMLInputElement).value) || 0;
     const mes = parseInt(selMes.value);
     const ano = parseInt(selAno.value);
-    const errorDiv = document.getElementById('form-error')!;
 
     if (!funcionario_id || isNaN(valor_meta)) {
-      errorDiv.textContent = 'Preencha todos os campos obrigatórios.';
-      errorDiv.style.display = 'block'; return;
+      mostrarErro('Preencha todos os campos obrigatórios.');
+      return;
     }
-    errorDiv.style.display = 'none';
+    document.getElementById('form-error')!.style.display = 'none';
 
-    if (editingId) {
-      await supabase.from('metas').update({ funcionario_id, valor_meta, valor_realizado, mes, ano }).eq('id', editingId);
-    } else {
-      await supabase.from('metas').insert({ funcionario_id, valor_meta, valor_realizado, mes, ano });
+    const { error } = editingId
+      ? await supabase.from('metas').update({ funcionario_id, valor_meta, mes, ano }).eq('id', editingId)
+      : await supabase.from('metas').insert({ funcionario_id, valor_meta, mes, ano });
+
+    if (error) {
+      // 23505 = violação de UNIQUE(funcionario_id, mes, ano)
+      mostrarErro(error.code === '23505'
+        ? 'Este funcionário já tem uma meta lançada para este mês. Edite a meta existente.'
+        : 'Erro ao salvar a meta: ' + error.message);
+      return;
     }
     closeModal(); load();
   });

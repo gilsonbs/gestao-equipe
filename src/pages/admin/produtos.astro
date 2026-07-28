@@ -206,7 +206,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   (window as any).deleteProd = async (id: string) => {
     if (!confirm('Excluir este produto?')) return;
-    await supabase.from('produtos_top').delete().eq('id', id);
+    const { error } = await supabase.from('produtos_top').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir o produto: ' + error.message); return; }
     load();
   };
 
@@ -225,10 +226,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     if (!nome) { errorDiv.textContent = 'Nome é obrigatório.'; errorDiv.style.display = 'block'; return; }
     errorDiv.style.display = 'none';
 
-    if (editingId) {
-      await supabase.from('produtos_top').update({ nome, substancia, categoria, quantidade, mes, ano }).eq('id', editingId);
-    } else {
-      await supabase.from('produtos_top').insert({ nome, substancia, categoria, quantidade, mes, ano });
+    const { error } = editingId
+      ? await supabase.from('produtos_top').update({ nome, substancia, categoria, quantidade, mes, ano }).eq('id', editingId)
+      : await supabase.from('produtos_top').insert({ nome, substancia, categoria, quantidade, mes, ano });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar o produto: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
     }
     closeModal(); load();
   });

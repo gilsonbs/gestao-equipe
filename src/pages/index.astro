@@ -140,6 +140,7 @@ const anoAtual = now.getFullYear();
 
 <script>
   import { supabase } from '../lib/supabase';
+  import { intervaloDoMes } from '../lib/dates';
 
   const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const MESES_SHORT = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -153,30 +154,34 @@ const anoAtual = now.getFullYear();
   // ===== STATS =====
   async function loadStats() {
     const mes = getMes(); const ano = getAno();
-    const prefix = `${ano}-${String(mes).padStart(2,'0')}`;
-    const [lojaRes, metasRes, folgasRes] = await Promise.all([
+    const { inicio, fim } = intervaloDoMes(mes, ano);
+    const [lojaRes, desempenhoRes, folgasRes] = await Promise.all([
       supabase.from('vendas_loja').select('valor_total').eq('mes', mes).eq('ano', ano),
-      supabase.from('metas').select('valor_meta, valor_realizado').eq('mes', mes).eq('ano', ano),
-      supabase.from('folgas').select('id').gte('data_inicio', `${prefix}-01`).lte('data_inicio', `${prefix}-31`),
+      supabase.from('desempenho_mensal').select('valor_meta, percentual').eq('mes', mes).eq('ano', ano),
+      supabase.from('folgas').select('id', { count: 'exact', head: true })
+        .gte('data_inicio', inicio).lte('data_inicio', fim),
     ]);
 
     const totalLoja = (lojaRes.data ?? []).reduce((s: number, v: any) => s + Number(v.valor_total), 0);
     document.getElementById('stat-vendas-loja')!.querySelector('.stat-value')!.textContent =
       totalLoja > 0 ? `R$ ${totalLoja.toLocaleString('pt-BR', {minimumFractionDigits:2})}` : 'R$ 0,00';
 
-    const metas = metasRes.data ?? [];
-    document.getElementById('stat-total-metas')!.querySelector('.stat-value')!.textContent = String(metas.length);
+    const linhas = desempenhoRes.data ?? [];
+    const comMeta = linhas.filter((d: any) => Number(d.valor_meta) > 0);
+    document.getElementById('stat-total-metas')!.querySelector('.stat-value')!.textContent = String(comMeta.length);
 
-    const media = metas.length > 0
-      ? Math.round(metas.reduce((s: number, m: any) =>
-          s + (m.valor_meta > 0 ? (m.valor_realizado / m.valor_meta) * 100 : 0), 0) / metas.length)
+    // Só entra na média quem tem meta definida — quem vendeu sem meta
+    // tem percentual NULL e não deve puxar o indicador para baixo.
+    const comPercentual = linhas.filter((d: any) => d.percentual !== null);
+    const media = comPercentual.length > 0
+      ? Math.round(comPercentual.reduce((s: number, d: any) => s + Number(d.percentual), 0) / comPercentual.length)
       : 0;
-    const mediaEl = document.getElementById('stat-media-metas')!.querySelector('.stat-value')!;
-    mediaEl.textContent = `${media}%`;
+    const mediaEl = document.getElementById('stat-media-metas')!.querySelector('.stat-value') as HTMLElement;
+    mediaEl.textContent = comPercentual.length > 0 ? `${media}%` : '—';
     mediaEl.style.color = media >= 100 ? 'var(--color-success)' : media >= 70 ? 'var(--color-warning)' : 'var(--color-danger)';
 
     document.getElementById('stat-folgas')!.querySelector('.stat-value')!.textContent =
-      String((folgasRes.count ?? folgasRes.data?.length ?? 0));
+      String(folgasRes.count ?? 0);
   }
 
   // ===== METAS =====
@@ -184,9 +189,10 @@ const anoAtual = now.getFullYear();
     const mes = getMes(); const ano = getAno();
     document.getElementById('metas-periodo')!.textContent = `${MESES[mes]} ${ano}`;
     const { data } = await supabase
-      .from('metas')
-      .select('*, funcionarios(nome, cargo)')
+      .from('desempenho_mensal')
+      .select('*')
       .eq('mes', mes).eq('ano', ano)
+      .gt('valor_meta', 0)
       .order('valor_meta', { ascending: false });
 
     const body = document.getElementById('metas-body')!;
@@ -195,15 +201,15 @@ const anoAtual = now.getFullYear();
       return;
     }
     body.innerHTML = data.map((m: any) => {
-      const pct = m.valor_meta > 0 ? Math.min(Math.round((m.valor_realizado / m.valor_meta) * 100), 100) : 0;
-      const pctReal = m.valor_meta > 0 ? Math.round((m.valor_realizado / m.valor_meta) * 100) : 0;
+      const pctReal = Number(m.percentual ?? 0);
+      const pct = Math.min(pctReal, 100);
       const cls = pctReal >= 100 ? 'success' : pctReal >= 70 ? 'warning' : 'danger';
       const color = pctReal >= 100 ? 'var(--color-success)' : pctReal >= 70 ? 'var(--color-warning)' : 'var(--color-danger)';
       return `<div style="margin-bottom:1rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
           <div>
-            <span style="font-weight:600">${m.funcionarios?.nome ?? '—'}</span>
-            ${m.funcionarios?.cargo ? `<span style="font-size:.75rem;color:#64748b;margin-left:.5rem">${m.funcionarios.cargo}</span>` : ''}
+            <span style="font-weight:600">${m.nome ?? '—'}</span>
+            ${m.cargo ? `<span style="font-size:.75rem;color:#64748b;margin-left:.5rem">${m.cargo}</span>` : ''}
           </div>
           <span style="font-weight:700;color:${color}">${pctReal}%</span>
         </div>
@@ -257,12 +263,12 @@ const anoAtual = now.getFullYear();
   let folgaFilter = '';
   async function loadFolgas() {
     const mes = getMes(); const ano = getAno();
-    const prefix = `${ano}-${String(mes).padStart(2,'0')}`;
+    const { inicio, fim } = intervaloDoMes(mes, ano);
     let query = supabase
       .from('folgas')
       .select('*, funcionarios(nome)')
-      .or(`data_inicio.gte.${prefix}-01,data_fim.gte.${prefix}-01`)
-      .lte('data_inicio', `${prefix}-31`)
+      .lte('data_inicio', fim)
+      .gte('data_fim', inicio)
       .order('data_inicio');
     if (folgaFilter) query = query.eq('tipo', folgaFilter);
     const { data } = await query;
@@ -310,26 +316,26 @@ const anoAtual = now.getFullYear();
     const mes = getMes(); const ano = getAno();
     document.getElementById('vendas-periodo')!.textContent = `${MESES[mes]} ${ano}`;
     const { data } = await supabase
-      .from('metas')
-      .select('valor_realizado, funcionarios(nome)')
+      .from('vendas_funcionario')
+      .select('valor, funcionarios(nome)')
       .eq('mes', mes).eq('ano', ano)
-      .gt('valor_realizado', 0)
-      .order('valor_realizado', { ascending: false });
+      .gt('valor', 0)
+      .order('valor', { ascending: false });
 
     const body = document.getElementById('vendas-body')!;
     if (!data || data.length === 0) {
       body.innerHTML = '<div class="empty"><div class="empty-icon">💰</div>Nenhuma venda lançada</div>';
       return;
     }
-    const maxVal = Math.max(...data.map((v: any) => Number(v.valor_realizado)));
+    const maxVal = Math.max(...data.map((v: any) => Number(v.valor)));
     body.innerHTML = data.map((v: any, i: number) => {
-      const pct = maxVal > 0 ? Math.round((v.valor_realizado / maxVal) * 100) : 0;
+      const pct = maxVal > 0 ? Math.round((v.valor / maxVal) * 100) : 0;
       const colors = ['var(--color-primary)','var(--color-secondary)','#7c3aed','#dc2626','#d97706'];
       const color = colors[i % colors.length];
       return `<div style="margin-bottom:.75rem">
         <div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
           <span style="font-weight:500">${(v.funcionarios as any)?.nome ?? '—'}</span>
-          <span style="font-weight:600">R$ ${Number(v.valor_realizado).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+          <span style="font-weight:600">R$ ${Number(v.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
         </div>
         <div class="progress">
           <div class="progress-bar" style="width:${pct}%;background:${color}"></div>

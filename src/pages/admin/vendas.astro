@@ -138,12 +138,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   async function loadVendasFunc() {
     const { mes, ano } = getMesAno();
-    const { data } = await supabase
-      .from('metas')
-      .select('id, valor_realizado, funcionarios(nome)')
-      .eq('mes', mes).eq('ano', ano);
+    const { data, error } = await supabase
+      .from('vendas_funcionario')
+      .select('id, valor, funcionarios(nome)')
+      .eq('mes', mes).eq('ano', ano)
+      .order('valor', { ascending: false });
 
     const tbody = document.getElementById('tbody-func')!;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="3"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
+      return;
+    }
     if (!data || data.length === 0) {
       tbody.innerHTML = '<tr><td colspan="3"><div class="empty"><div class="empty-icon">💰</div>Nenhuma venda lançada</div></td></tr>';
       return;
@@ -151,16 +156,23 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     tbody.innerHTML = data.map((v: any) => `
       <tr>
         <td>${(v.funcionarios as any)?.nome ?? '—'}</td>
-        <td>R$ ${Number(v.valor_realizado).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="openEditFunc('${v.id}', ${v.valor_realizado})">✏️</button></td>
+        <td>R$ ${Number(v.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td style="display:flex;gap:.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="openEditFunc('${v.id}', ${v.valor})">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteVendaFunc('${v.id}')">🗑️</button>
+        </td>
       </tr>
     `).join('');
   }
 
   async function loadVendasLoja() {
     const { mes, ano } = getMesAno();
-    const { data } = await supabase.from('vendas_loja').select('*').eq('mes', mes).eq('ano', ano);
+    const { data, error } = await supabase.from('vendas_loja').select('*').eq('mes', mes).eq('ano', ano);
     const tbody = document.getElementById('tbody-loja')!;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="2"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
+      return;
+    }
     if (!data || data.length === 0) {
       tbody.innerHTML = '<tr><td colspan="2"><div class="empty"><div class="empty-icon">🏪</div>Nenhum lançamento</div></td></tr>';
       return;
@@ -204,18 +216,28 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       errorDiv.textContent = 'Preencha todos os campos.'; errorDiv.style.display = 'block'; return;
     }
     errorDiv.style.display = 'none';
-    if (editingFuncId) {
-      await supabase.from('metas').update({ valor_realizado: valor }).eq('id', editingFuncId);
-    } else {
-      const { data: exists } = await supabase.from('metas').select('id').eq('funcionario_id', funcionario_id).eq('mes', mes).eq('ano', ano).single();
-      if (exists) {
-        await supabase.from('metas').update({ valor_realizado: valor }).eq('id', exists.id);
-      } else {
-        await supabase.from('metas').insert({ funcionario_id, mes, ano, valor_meta: 0, valor_realizado: valor });
-      }
+
+    // O UNIQUE(funcionario_id, mes, ano) permite usar upsert: lançar de novo
+    // no mesmo período sobrescreve o valor em vez de falhar.
+    const { error } = editingFuncId
+      ? await supabase.from('vendas_funcionario').update({ valor }).eq('id', editingFuncId)
+      : await supabase.from('vendas_funcionario')
+          .upsert({ funcionario_id, mes, ano, valor }, { onConflict: 'funcionario_id,mes,ano' });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
     }
     (window as any).closeModalFunc(); load();
   });
+
+  (window as any).deleteVendaFunc = async (id: string) => {
+    if (!confirm('Excluir este lançamento de venda?')) return;
+    const { error } = await supabase.from('vendas_funcionario').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    loadVendasFunc();
+  };
 
   // Modal Loja
   (window as any).closeModalLoja = () => {
@@ -230,7 +252,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   };
   (window as any).deleteLoja = async (id: string) => {
     if (!confirm('Excluir este lançamento?')) return;
-    await supabase.from('vendas_loja').delete().eq('id', id);
+    const { error } = await supabase.from('vendas_loja').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
     loadVendasLoja();
   };
   document.getElementById('btn-novo-loja')?.addEventListener('click', () => {
@@ -245,10 +268,15 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     const errorDiv = document.getElementById('vl-error')!;
     if (isNaN(valor_total)) { errorDiv.textContent = 'Informe o valor.'; errorDiv.style.display = 'block'; return; }
     errorDiv.style.display = 'none';
-    if (editingLojaId) {
-      await supabase.from('vendas_loja').update({ valor_total }).eq('id', editingLojaId);
-    } else {
-      await supabase.from('vendas_loja').insert({ mes, ano, valor_total });
+
+    const { error } = editingLojaId
+      ? await supabase.from('vendas_loja').update({ valor_total }).eq('id', editingLojaId)
+      : await supabase.from('vendas_loja').insert({ mes, ano, valor_total });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
     }
     (window as any).closeModalLoja(); loadVendasLoja();
   });

@@ -158,7 +158,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   (window as any).deleteFolga = async (id: string) => {
     if (!confirm('Excluir este registro?')) return;
-    await supabase.from('folgas').delete().eq('id', id);
+    const { error } = await supabase.from('folgas').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir o registro: ' + error.message); return; }
     load();
   };
 
@@ -179,10 +180,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
     errorDiv.style.display = 'none';
 
-    if (editingId) {
-      await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim }).eq('id', editingId);
-    } else {
-      await supabase.from('folgas').insert({ funcionario_id, tipo, data_inicio, data_fim });
+    const { error } = editingId
+      ? await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim }).eq('id', editingId)
+      : await supabase.from('folgas').insert({ funcionario_id, tipo, data_inicio, data_fim });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar o registro: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
     }
     closeModal(); load();
   });

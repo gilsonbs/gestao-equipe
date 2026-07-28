@@ -53,18 +53,19 @@ const base = import.meta.env.BASE_URL;
 
 <script>
   import { supabase } from '../../lib/supabase';
+  import { intervaloDoMes } from '../../lib/dates';
 
   const now = new Date();
   const mes = now.getMonth() + 1;
   const ano = now.getFullYear();
+  const { inicio, fim } = intervaloDoMes(mes, ano);
 
   async function loadStats() {
     const [funcRes, metasRes, folgasRes, prodRes, anivRes] = await Promise.all([
       supabase.from('funcionarios').select('id', { count: 'exact', head: true }).eq('ativo', true),
       supabase.from('metas').select('id', { count: 'exact', head: true }).eq('mes', mes).eq('ano', ano),
       supabase.from('folgas').select('id', { count: 'exact', head: true })
-        .gte('data_inicio', `${ano}-${String(mes).padStart(2,'0')}-01`)
-        .lte('data_inicio', `${ano}-${String(mes).padStart(2,'0')}-31`),
+        .lte('data_inicio', fim).gte('data_fim', inicio),
       supabase.from('produtos_top').select('id', { count: 'exact', head: true }),
       supabase.from('funcionarios').select('nome, data_nascimento').eq('ativo', true).not('data_nascimento', 'is', null),
     ]);

@@ -129,8 +129,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   };
 
   (window as any).deleteFunc = async (id: string) => {
-    if (!confirm('Excluir este funcionário?')) return;
-    await supabase.from('funcionarios').delete().eq('id', id);
+    if (!confirm('Excluir este funcionário? Metas, vendas e folgas dele também serão removidas.')) return;
+    const { error } = await supabase.from('funcionarios').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir o funcionário: ' + error.message); return; }
     load();
   };
 
@@ -144,10 +145,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     if (!nome) { errorDiv.textContent = 'Nome é obrigatório.'; errorDiv.style.display = 'block'; return; }
     errorDiv.style.display = 'none';
 
-    if (editingId) {
-      await supabase.from('funcionarios').update({ nome, cargo, data_nascimento, ativo }).eq('id', editingId);
-    } else {
-      await supabase.from('funcionarios').insert({ nome, cargo, data_nascimento, ativo });
+    const { error } = editingId
+      ? await supabase.from('funcionarios').update({ nome, cargo, data_nascimento, ativo }).eq('id', editingId)
+      : await supabase.from('funcionarios').insert({ nome, cargo, data_nascimento, ativo });
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar o funcionário: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
     }
     closeModal();
     load();

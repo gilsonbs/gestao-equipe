@@ -20,8 +20,33 @@ export type Meta = {
   mes: number;
   ano: number;
   valor_meta: number;
-  valor_realizado: number;
   funcionarios?: { nome: string; cargo: string | null };
+};
+
+export type VendaFuncionario = {
+  id: string;
+  funcionario_id: string;
+  mes: number;
+  ano: number;
+  valor: number;
+  funcionarios?: { nome: string };
+};
+
+/** Linha da view `desempenho_mensal` (meta + realizado combinados). */
+export type DesempenhoMensal = {
+  funcionario_id: string;
+  /** NULL quando o funcionário tem venda mas nenhuma meta no período. */
+  meta_id: string | null;
+  /** NULL quando o funcionário tem meta mas nenhuma venda no período. */
+  venda_id: string | null;
+  nome: string;
+  cargo: string | null;
+  mes: number;
+  ano: number;
+  valor_meta: number;
+  valor_realizado: number;
+  /** NULL quando não há meta definida para o período. */
+  percentual: number | null;
 };
 
 export type VendaLoja = {
