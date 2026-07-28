@@ -37,10 +37,34 @@ view de desempenho, as políticas de RLS e os índices.
 
 O login do painel usa e-mail e senha, mas o schema **não** cria nenhum usuário.
 No painel do Supabase: **Authentication → Users → Add user**, e preencha
-e-mail e senha. Marque a opção de confirmar o e-mail automaticamente, caso
-contrário o login falha até a confirmação.
+e-mail e senha. Marque **Auto Confirm User** — sem isso o Supabase aguarda a
+confirmação por e-mail e o login falha, exibindo apenas "E-mail ou senha
+incorretos", sem indicar a causa real.
 
 Repita para cada pessoa que precisar de acesso ao admin.
+
+### 2.1. Desabilitar o cadastro público (obrigatório)
+
+Em **Authentication → Sign In / Providers → Email**, desligue
+**"Allow new users to sign up"**.
+
+Isso não é opcional. O Supabase habilita o cadastro por e-mail por padrão, e
+embora o app não tenha tela de cadastro, o endpoint `/auth/v1/signup` continua
+acessível com a chave `anon` — que é pública e vai embutida no JavaScript do
+site. Como as políticas de escrita liberam qualquer sessão autenticada:
+
+```sql
+USING ((select auth.role()) = 'authenticated')
+```
+
+...qualquer pessoa que encontrasse o site poderia criar a própria conta e
+passar a editar funcionários, metas e vendas. Com o cadastro desligado,
+existem apenas as contas criadas manualmente no painel.
+
+Note que **não há distinção de permissão entre usuários do admin**: toda conta
+autenticada pode escrever em todas as tabelas. Se um dia for preciso separar
+papéis — quem só lança vendas de quem edita funcionários —, isso exige uma
+tabela de perfis e políticas de RLS por papel.
 
 ### 3. Rodar localmente
 
@@ -77,7 +101,15 @@ Em **Settings → Secrets and variables → Actions**, crie os secrets:
 | `PUBLIC_SUPABASE_URL` | URL do projeto Supabase |
 | `PUBLIC_SUPABASE_ANON_KEY` | Chave `anon` pública |
 
-Em **Settings → Pages**, defina **Source: GitHub Actions**.
+Em **Settings → Pages → Build and deployment**, defina
+**Source: GitHub Actions** — e não "Deploy from a branch". O sinal de que
+está correto é o campo de branch desaparecer da tela.
+
+Com a opção errada, o GitHub tenta construir o repositório com Jekyll, que
+não entende arquivos `.astro` e falha com *"Invalid YAML front matter"*. E se
+o Pages não estiver configurado como GitHub Actions, o job `deploy` termina
+em segundos sem executar nenhum passo, porque o ambiente `github-pages` não
+pode ser resolvido.
 
 A partir daí, todo push na `main` dispara build e publicação.
 
