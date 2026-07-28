@@ -91,6 +91,7 @@ const anoAtual = now.getFullYear();
     <div class="card">
       <div class="card-header">
         <span class="card-title">🎂 Aniversários do Mês</span>
+        <span id="aniv-periodo" style="font-size:.8rem;color:var(--text-muted)"></span>
       </div>
       <div class="card-body" id="aniv-body">
         <div class="loading"><div class="spinner"></div> Carregando...</div>
@@ -279,20 +280,38 @@ const anoAtual = now.getFullYear();
   // ===== ANIVERSÁRIOS =====
   async function loadAniversarios() {
     const mes = getMes();
-    const { data } = await supabase
+    document.getElementById('aniv-periodo')!.textContent = MESES[mes];
+
+    const { data, error } = await supabase
       .from('funcionarios')
       .select('nome, cargo, data_nascimento')
       .eq('ativo', true)
       .not('data_nascimento', 'is', null);
 
     const body = document.getElementById('aniv-body')!;
-    const aniv = (data ?? [])
+
+    // Sem isto, uma falha na consulta apareceria como "nenhum
+    // aniversário" e esconderia o problema real.
+    if (error) {
+      body.innerHTML = `<div class="alert alert-danger" style="margin:0">Erro ao carregar aniversários: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    const comData = data ?? [];
+    const aniv = comData
       .filter((f: any) => f.data_nascimento && parseInt(f.data_nascimento.split('-')[1]) === mes)
       .sort((a: any, b: any) => parseInt(a.data_nascimento.split('-')[2]) - parseInt(b.data_nascimento.split('-')[2]));
 
     const hoje = new Date();
     if (aniv.length === 0) {
-      body.innerHTML = '<div class="empty"><div class="empty-icon">🎂</div>Nenhum aniversário este mês</div>';
+      // Distingue "ninguém faz aniversário neste mês" de "ninguém tem
+      // data de nascimento cadastrada" — problemas bem diferentes.
+      body.innerHTML = comData.length === 0
+        ? `<div class="empty"><div class="empty-icon">🎂</div>
+             Nenhum funcionário ativo tem data de nascimento cadastrada.<br>
+             <span style="font-size:.85em">Preencha em Admin → Funcionários.</span>
+           </div>`
+        : `<div class="empty"><div class="empty-icon">🎂</div>Nenhum aniversário em ${MESES[mes]}</div>`;
       return;
     }
     body.innerHTML = aniv.map((f: any) => {
@@ -517,7 +536,11 @@ const anoAtual = now.getFullYear();
     loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos();
   }
 
-  selMes.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); });
+  // Aniversários dependem só do mês, mas precisam recarregar junto:
+  // sem isso o card ficava preso no mês em que a página abriu.
+  selMes.addEventListener('change', () => {
+    loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadAniversarios();
+  });
   selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); });
 
   loadAll();
