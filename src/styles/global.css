@@ -481,6 +481,133 @@ tbody tr:hover td { background: var(--slate-50); }
 
 
 /* =========================================================
+   Calendário de folgas
+
+   Também vive aqui, e não no <style> da página, porque a grade é
+   montada por JavaScript em tempo de execução — ver a nota do bloco
+   de avisos acima.
+   ========================================================= */
+
+.cal {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.cal-dow {
+  text-align: center;
+  font-size: .68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-subtle);
+  padding-bottom: var(--sp-1);
+}
+
+.cal-dia {
+  /* Quadrada: mantém a grade estável em qualquer largura de tela */
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  min-width: 0;
+}
+.cal-dia.vazia { border: none; background: transparent; }
+
+.cal-num { font-size: .8rem; font-weight: 550; color: var(--slate-600); line-height: 1; }
+
+.cal-dia.ocupado { border-color: var(--slate-300); }
+.cal-dia.tem-folga  { background: var(--warning-soft); }
+.cal-dia.tem-ferias { background: var(--info-soft); }
+/* Dia com os dois tipos: metade e metade, para não escolher um vencedor */
+.cal-dia.tem-folga.tem-ferias {
+  background: linear-gradient(135deg, var(--warning-soft) 50%, var(--info-soft) 50%);
+}
+.cal-dia.ocupado .cal-num { color: var(--text); font-weight: 650; }
+
+.cal-dia.hoje {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.cal-dia.hoje .cal-num { color: var(--accent); font-weight: 700; }
+
+.cal-pontos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: .4rem;
+  flex-wrap: wrap;
+}
+
+.cal-ponto {
+  width: .4rem;
+  height: .4rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.cal-ponto.folga  { background: var(--warning); }
+.cal-ponto.ferias { background: var(--info); }
+
+.cal-mais { font-size: .55rem; font-weight: 600; color: var(--text-muted); line-height: 1; }
+
+.cal-legenda {
+  display: flex;
+  gap: var(--sp-4);
+  justify-content: center;
+  margin-top: var(--sp-3);
+  font-size: .75rem;
+  color: var(--text-muted);
+}
+.cal-legenda span { display: inline-flex; align-items: center; gap: var(--sp-1); }
+
+.cal-lista {
+  list-style: none;
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.cal-lista-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  font-size: .85rem;
+}
+.cal-lista-nome { font-weight: 600; }
+.cal-lista-datas { color: var(--text-muted); font-size: .78rem; flex: 1; min-width: 0; }
+
+@media (max-width: 640px) {
+  /* Nome e etiqueta na primeira linha, datas na segunda: em telas
+     estreitas as três colunas quebravam desalinhadas entre si. */
+  .cal-lista-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--sp-1) var(--sp-2);
+    align-items: center;
+  }
+  .cal-lista-datas {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 400px) {
+  .cal { gap: 2px; }
+  .cal-num { font-size: .72rem; }
+  .cal-ponto { width: .32rem; height: .32rem; }
+}
+
+/* =========================================================
    Responsivo
    ========================================================= */
 

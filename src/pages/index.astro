@@ -230,8 +230,13 @@ const anoAtual = now.getFullYear();
       ? Math.round(comPercentual.reduce((s: number, d: any) => s + Number(d.percentual), 0) / comPercentual.length)
       : 0;
     const mediaEl = document.getElementById('stat-media-metas')!.querySelector('.stat-value') as HTMLElement;
-    mediaEl.textContent = comPercentual.length > 0 ? `${media}%` : '—';
-    mediaEl.style.color = media >= 100 ? 'var(--success)' : media >= 70 ? 'var(--warning)' : 'var(--danger)';
+    const temMedia = comPercentual.length > 0;
+    mediaEl.textContent = temMedia ? `${media}%` : '—';
+    // Sem nenhuma meta lançada não há desempenho ruim a sinalizar — pintar
+    // o traço de vermelho faria parecer alerta onde só falta informação.
+    mediaEl.style.color = !temMedia
+      ? 'var(--text-subtle)'
+      : media >= 100 ? 'var(--success)' : media >= 70 ? 'var(--warning)' : 'var(--danger)';
 
     document.getElementById('stat-folgas')!.querySelector('.stat-value')!.textContent =
       String(folgasRes.count ?? 0);
@@ -342,30 +347,114 @@ const anoAtual = now.getFullYear();
       .gte('data_fim', inicio)
       .order('data_inicio');
     if (folgaFilter) query = query.eq('tipo', folgaFilter);
-    const { data } = await query;
+    const { data, error } = await query;
 
     const body = document.getElementById('folgas-body')!;
-    if (!data || data.length === 0) {
-      body.innerHTML = '<div class="empty"><div class="empty-icon">📅</div>Nenhuma folga ou férias agendada</div>';
+    if (error) {
+      body.innerHTML = `<div class="alert alert-danger" style="margin:0">Erro ao carregar folgas: ${escapeHtml(error.message)}</div>`;
       return;
     }
-    body.innerHTML = `<div style="display:flex;flex-direction:column;gap:.5rem">` + data.map((f: any) => {
-      const inicio = new Date(f.data_inicio + 'T00:00:00');
-      const fim = new Date(f.data_fim + 'T00:00:00');
-      const dias = Math.round((fim.getTime() - inicio.getTime()) / 86400000) + 1;
-      const badge = f.tipo === 'ferias' ? 'badge-info' : 'badge-warning';
-      const icon = f.tipo === 'ferias' ? '🏖️' : '📋';
-      return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem;background:#f8fafc;border-radius:.5rem;border:1px solid #e2e8f0">
-        <span style="font-size:1.25rem">${icon}</span>
-        <div style="flex:1">
-          <div style="font-weight:600">${f.funcionarios?.nome ?? '—'}</div>
-          <div style="font-size:.75rem;color:#64748b">
-            ${formatDate(f.data_inicio)} → ${formatDate(f.data_fim)} · ${dias} dia${dias>1?'s':''}
-          </div>
-        </div>
-        <span class="badge ${badge}">${f.tipo === 'ferias' ? 'Férias' : 'Folga'}</span>
+    if (!data || data.length === 0) {
+      body.innerHTML = `<div class="empty"><div class="empty-icon">📅</div>Nenhuma folga ou férias em ${MESES[mes]}</div>`;
+      return;
+    }
+
+    body.innerHTML = montarCalendario(data, mes, ano) + montarListaFolgas(data);
+  }
+
+  /**
+   * Distribui cada folga pelos dias que ela ocupa DENTRO do mês exibido.
+   * Um período pode começar no mês anterior ou terminar no seguinte, então
+   * as pontas são recortadas na borda do mês em vez de descartadas.
+   */
+  function diasOcupados(f: any, mes: number, ano: number, diasNoMes: number) {
+    const [ai, mi, di] = f.data_inicio.split('-').map(Number);
+    const [af, mf, df] = f.data_fim.split('-').map(Number);
+    const comecouAntes = ai < ano || (ai === ano && mi < mes);
+    const terminaDepois = af > ano || (af === ano && mf > mes);
+    const primeiro = comecouAntes ? 1 : di;
+    const ultimo = terminaDepois ? diasNoMes : df;
+    const dias: number[] = [];
+    for (let d = primeiro; d <= ultimo; d++) dias.push(d);
+    return dias;
+  }
+
+  function montarCalendario(folgas: any[], mes: number, ano: number) {
+    const diasNoMes = new Date(ano, mes, 0).getDate();
+    const vaziosNoInicio = new Date(ano, mes - 1, 1).getDay(); // 0 = domingo
+
+    // dia -> lista de quem está de folga/férias naquele dia
+    const porDia = new Map<number, { nome: string; tipo: string }[]>();
+    for (const f of folgas) {
+      const nome = f.funcionarios?.nome ?? '—';
+      for (const d of diasOcupados(f, mes, ano, diasNoMes)) {
+        if (!porDia.has(d)) porDia.set(d, []);
+        porDia.get(d)!.push({ nome, tipo: f.tipo });
+      }
+    }
+
+    const hoje = new Date();
+    const ehMesAtual = hoje.getMonth() + 1 === mes && hoje.getFullYear() === ano;
+    const diaHoje = hoje.getDate();
+
+    const cabecalho = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+      .map((d, i) => `<div class="cal-dow" aria-hidden="true">${d}</div>`).join('');
+
+    const vazias = Array.from({ length: vaziosNoInicio }, () => '<div class="cal-dia vazia"></div>').join('');
+
+    const celulas = Array.from({ length: diasNoMes }, (_, i) => {
+      const dia = i + 1;
+      const gente = porDia.get(dia) ?? [];
+      const temFerias = gente.some(g => g.tipo === 'ferias');
+      const temFolga = gente.some(g => g.tipo === 'folga');
+      const classes = ['cal-dia'];
+      if (gente.length) classes.push('ocupado');
+      if (temFerias) classes.push('tem-ferias');
+      if (temFolga) classes.push('tem-folga');
+      if (ehMesAtual && dia === diaHoje) classes.push('hoje');
+
+      // Até 3 marcadores por dia; acima disso o "+N" evita estourar a célula
+      const visiveis = gente.slice(0, 3);
+      const extras = gente.length - visiveis.length;
+      const pontos = visiveis
+        .map(g => `<span class="cal-ponto ${g.tipo}"></span>`).join('') +
+        (extras > 0 ? `<span class="cal-mais">+${extras}</span>` : '');
+
+      const titulo = gente.length
+        ? `${dia}: ${gente.map(g => `${g.nome} (${g.tipo === 'ferias' ? 'férias' : 'folga'})`).join(', ')}`
+        : String(dia);
+
+      return `<div class="${classes.join(' ')}" title="${escapeHtml(titulo)}">
+        <span class="cal-num">${dia}</span>
+        <span class="cal-pontos">${pontos}</span>
       </div>`;
-    }).join('') + '</div>';
+    }).join('');
+
+    return `<div class="cal" role="grid" aria-label="Calendário de folgas e férias">
+        ${cabecalho}${vazias}${celulas}
+      </div>
+      <div class="cal-legenda">
+        <span><span class="cal-ponto folga"></span> Folga</span>
+        <span><span class="cal-ponto ferias"></span> Férias</span>
+      </div>`;
+  }
+
+  /** Os nomes não cabem dentro das células no celular, então vão abaixo. */
+  function montarListaFolgas(folgas: any[]) {
+    return `<ul class="cal-lista">` + folgas.map((f: any) => {
+      const ini = new Date(f.data_inicio + 'T00:00:00');
+      const fim = new Date(f.data_fim + 'T00:00:00');
+      const dias = Math.round((fim.getTime() - ini.getTime()) / 86400000) + 1;
+      const ehFerias = f.tipo === 'ferias';
+      return `<li class="cal-lista-item">
+        <span class="cal-ponto ${f.tipo}"></span>
+        <span class="cal-lista-nome">${escapeHtml(f.funcionarios?.nome ?? '—')}</span>
+        <span class="cal-lista-datas">
+          ${formatDate(f.data_inicio)} → ${formatDate(f.data_fim)} · ${dias} dia${dias > 1 ? 's' : ''}
+        </span>
+        <span class="badge ${ehFerias ? 'badge-info' : 'badge-warning'}">${ehFerias ? 'Férias' : 'Folga'}</span>
+      </li>`;
+    }).join('') + '</ul>';
   }
 
   function formatDate(d: string) {
