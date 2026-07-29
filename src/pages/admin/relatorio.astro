@@ -63,6 +63,31 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </div>
   </div>
 
+  <!-- Comparativo de Períodos -->
+  <div class="card rel-card">
+    <div class="card-header">
+      <span class="card-title">🔍 Comparativo de Períodos</span>
+    </div>
+    <div class="card-body" style="padding:var(--sp-3) var(--sp-4) var(--sp-5)">
+      <div class="comp-filtro">
+        <div class="comp-periodo">
+          <span class="comp-leg-dot" style="background:var(--accent)"></span>
+          <select id="comp-mes-a" class="input" style="width:auto"></select>
+          <select id="comp-ano-a" class="input" style="width:auto"></select>
+        </div>
+        <span class="comp-vs">×</span>
+        <div class="comp-periodo">
+          <span class="comp-leg-dot" style="background:var(--warning)"></span>
+          <select id="comp-mes-b" class="input" style="width:auto"></select>
+          <select id="comp-ano-b" class="input" style="width:auto"></select>
+        </div>
+      </div>
+      <div id="comp-resultado">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+
 </AdminLayout>
 
 <script>
@@ -106,6 +131,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     });
 
     render();
+    initComparativo();
   }
 
   function chave(mes: number, ano: number) {
@@ -358,6 +384,175 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </table></div>`;
   }
 
+  // ===== COMPARATIVO DE PERÍODOS =====
+  const MESES_NOMES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                        'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  function initComparativo() {
+    const anos = [...new Set(allLoja.map(r => r.ano))].sort();
+    const wrap = document.getElementById('comp-resultado')!;
+    if (anos.length === 0) {
+      wrap.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div>Nenhum dado disponível para comparar</div>';
+      return;
+    }
+
+    const mesA = document.getElementById('comp-mes-a') as HTMLSelectElement;
+    const mesB = document.getElementById('comp-mes-b') as HTMLSelectElement;
+    const anoA = document.getElementById('comp-ano-a') as HTMLSelectElement;
+    const anoB = document.getElementById('comp-ano-b') as HTMLSelectElement;
+
+    [mesA, mesB].forEach(sel => {
+      for (let m = 1; m <= 12; m++) {
+        const opt = document.createElement('option');
+        opt.value = String(m);
+        opt.textContent = MESES_NOMES[m];
+        sel.appendChild(opt);
+      }
+    });
+    anos.forEach(a => {
+      [anoA, anoB].forEach(sel => {
+        const opt = document.createElement('option');
+        opt.value = String(a);
+        opt.textContent = String(a);
+        sel.appendChild(opt);
+      });
+    });
+
+    // Padrão: mesmo mês, primeiro vs último ano
+    const mesAtual = new Date().getMonth() + 1;
+    mesA.value = String(mesAtual);
+    mesB.value = String(mesAtual);
+    anoA.value = String(anos[0]);
+    anoB.value = String(anos.at(-1));
+
+    const onChange = () => renderComparativo(
+      parseInt(mesA.value), parseInt(anoA.value),
+      parseInt(mesB.value), parseInt(anoB.value)
+    );
+    [mesA, mesB, anoA, anoB].forEach(sel => sel.addEventListener('change', onChange));
+    onChange();
+  }
+
+  function renderComparativo(mesA: number, anoA: number, mesB: number, anoB: number) {
+    const wrap = document.getElementById('comp-resultado')!;
+    const lbA = `${MESES_SHORT[mesA]}/${String(anoA).slice(2)}`;
+    const lbB = `${MESES_SHORT[mesB]}/${String(anoB).slice(2)}`;
+
+    const lojaA = allLoja.find(r => r.mes === mesA && r.ano === anoA);
+    const lojaB = allLoja.find(r => r.mes === mesB && r.ano === anoB);
+    const valA  = Number(lojaA?.valor_realizado ?? 0);
+    const valB  = Number(lojaB?.valor_realizado ?? 0);
+    const diff  = valB - valA;
+    const pctDelta = valA > 0 ? (diff / valA) * 100 : 0;
+    const sinal = diff >= 0 ? '+' : '';
+
+    // Funcionários
+    const fA = allFuncVendas.filter(f => f.mes === mesA && f.ano === anoA);
+    const fB = allFuncVendas.filter(f => f.mes === mesB && f.ano === anoB);
+    const mapA = new Map(fA.map(f => [f.funcionarios?.nome ?? '—', Number(f.valor)]));
+    const mapB = new Map(fB.map(f => [f.funcionarios?.nome ?? '—', Number(f.valor)]));
+    const nomes = [...new Set([...mapA.keys(), ...mapB.keys()])].sort();
+
+    // KPIs loja
+    const kpiHtml = `
+    <div class="comp-kpis">
+      <div class="comp-kpi-bloco">
+        <div class="comp-kpi-header" style="border-top:3px solid var(--accent)">${lbA}</div>
+        <div class="comp-kpi-val">${valA > 0 ? fmt(valA) : '—'}</div>
+        ${lojaA && Number(lojaA.valor_meta) > 0 ? `<div class="comp-kpi-meta">Meta: ${fmt(Number(lojaA.valor_meta))}</div>` : '<div class="comp-kpi-meta">&nbsp;</div>'}
+      </div>
+      <div class="comp-delta ${diff >= 0 ? 'pos' : 'neg'}">
+        <div class="comp-delta-pct">${valA > 0 ? `${sinal}${pctDelta.toFixed(1)}%` : '—'}</div>
+        <div class="comp-delta-abs">${valA > 0 && diff !== 0 ? `${sinal}R$ ${Math.abs(Math.round(diff)).toLocaleString('pt-BR')}` : ''}</div>
+      </div>
+      <div class="comp-kpi-bloco">
+        <div class="comp-kpi-header" style="border-top:3px solid var(--warning)">${lbB}</div>
+        <div class="comp-kpi-val">${valB > 0 ? fmt(valB) : '—'}</div>
+        ${lojaB && Number(lojaB.valor_meta) > 0 ? `<div class="comp-kpi-meta">Meta: ${fmt(Number(lojaB.valor_meta))}</div>` : '<div class="comp-kpi-meta">&nbsp;</div>'}
+      </div>
+    </div>`;
+
+    // Gráfico agrupado por funcionário
+    const chartHtml = nomes.length > 0 ? renderCompChart(nomes, mapA, mapB, lbA, lbB) : '';
+
+    // Tabela por funcionário
+    const tableRows = nomes.map(n => {
+      const a = mapA.get(n) ?? 0;
+      const b = mapB.get(n) ?? 0;
+      const d = a > 0 ? ((b - a) / a) * 100 : 0;
+      const cor = b > a ? 'var(--success)' : b < a ? 'var(--danger)' : 'var(--text-muted)';
+      return `<tr>
+        <td data-label="Funcionário">${n.split(' ')[0]}</td>
+        <td data-label="${lbA}">${a > 0 ? fmt(a) : '—'}</td>
+        <td data-label="${lbB}">${b > 0 ? fmt(b) : '—'}</td>
+        <td data-label="Variação" style="font-weight:600;color:${cor}">${a > 0 ? `${b >= a ? '+' : ''}${d.toFixed(1)}%` : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    const tableHtml = nomes.length > 0 ? `
+    <div class="table-wrap" style="margin-top:var(--sp-4)">
+      <table class="table-cards">
+        <thead><tr><th>Funcionário</th><th>${lbA}</th><th>${lbB}</th><th>Variação</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>` : '';
+
+    wrap.innerHTML = kpiHtml + chartHtml + tableHtml;
+  }
+
+  function renderCompChart(
+    nomes: string[],
+    mapA: Map<string, number>,
+    mapB: Map<string, number>,
+    lbA: string,
+    lbB: string
+  ): string {
+    const bW = 28, bGap = 4, grpW = bW * 2 + bGap, gap = 16;
+    const padL = 60, padR = 20, padT = 24, padB = 40, chartH = 160;
+    const aw = nomes.length * (grpW + gap) - gap;
+    const W  = padL + aw + padR;
+    const H  = chartH + padT + padB;
+
+    const allVals = nomes.flatMap(n => [mapA.get(n) ?? 0, mapB.get(n) ?? 0]);
+    const yMax = Math.max(...allVals, 1) * 1.15;
+
+    const xL = (i: number) => padL + i * (grpW + gap);
+    const xC = (i: number) => xL(i) + grpW / 2;
+    const yS = (v: number) => padT + chartH - (v / yMax) * chartH;
+
+    const nGrid = 4;
+    const gridLines = Array.from({ length: nGrid + 1 }, (_, i) => (yMax / nGrid) * i).map(v => {
+      const y = yS(v).toFixed(1);
+      return `<line x1="${padL}" y1="${y}" x2="${padL + aw}" y2="${y}" stroke="var(--slate-200)" stroke-width="1"/>
+              <text x="${padL - 6}" y="${(parseFloat(y) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="var(--text-muted)">R$${fmtK(v)}</text>`;
+    }).join('');
+
+    const barsHtml = nomes.map((n, i) => {
+      const a = mapA.get(n) ?? 0;
+      const b = mapB.get(n) ?? 0;
+      const hA = Math.max((a / yMax) * chartH, a > 0 ? 2 : 0);
+      const hB = Math.max((b / yMax) * chartH, b > 0 ? 2 : 0);
+      const nome = n.split(' ')[0];
+      return `<g>
+        ${a > 0 ? `<rect x="${xL(i)}" y="${(padT + chartH - hA).toFixed(1)}" width="${bW}" height="${hA.toFixed(1)}" fill="var(--accent)" rx="3"><title>${nome} ${lbA}: ${fmt(a)}</title></rect>` : ''}
+        ${b > 0 ? `<rect x="${(xL(i) + bW + bGap)}" y="${(padT + chartH - hB).toFixed(1)}" width="${bW}" height="${hB.toFixed(1)}" fill="var(--warning)" rx="3"><title>${nome} ${lbB}: ${fmt(b)}</title></rect>` : ''}
+        <text x="${xC(i).toFixed(1)}" y="${H - padB + 14}" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">${nome}</text>
+      </g>`;
+    }).join('');
+
+    const legenda = `
+      <div style="display:flex;gap:var(--sp-4);margin-bottom:var(--sp-2)">
+        <span style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--text-muted)"><span style="display:inline-block;width:14px;height:10px;background:var(--accent);border-radius:2px"></span>${lbA}</span>
+        <span style="display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--text-muted)"><span style="display:inline-block;width:14px;height:10px;background:var(--warning);border-radius:2px"></span>${lbB}</span>
+      </div>`;
+
+    return `<div style="overflow-x:auto;margin-top:var(--sp-4)">${legenda}<svg viewBox="0 0 ${W} ${H}" width="${Math.max(W, 320)}" height="${H}" style="display:block;min-width:${Math.max(W, 320)}px">
+      ${gridLines}
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + chartH}" stroke="var(--slate-200)" stroke-width="1"/>
+      ${barsHtml}
+    </svg></div>`;
+  }
+
   loadAll();
 </script>
 
@@ -369,5 +564,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   .rel-leg-item { display: flex; align-items: center; gap: 5px; font-size: .75rem; color: var(--text-muted); }
   .rel-leg-bar { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
   .rel-leg-dash { display: inline-block; width: 18px; height: 0; border-top: 2px dashed var(--slate-400); }
+  /* seletores do comparativo (estáticos no template) */
+  .comp-filtro { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; margin-bottom:var(--sp-4); padding-bottom:var(--sp-3); border-bottom:1px solid var(--border); }
+  .comp-periodo { display:flex; align-items:center; gap:var(--sp-2); }
+  .comp-leg-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+  .comp-vs { font-weight:700; color:var(--text-muted); padding:0 var(--sp-2); }
 </style>
 </AdminLayout>
