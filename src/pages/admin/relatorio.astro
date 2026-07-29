@@ -84,7 +84,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     ]);
 
     allLoja = (lojaRes.data ?? []) as LojaMes[];
-    allFuncVendas = (funcRes.data ?? []) as FuncVenda[];
+    allFuncVendas = (funcRes.data ?? []) as unknown as FuncVenda[];
 
     // Popula tabs de ano dinamicamente com os anos que têm dados
     const anos = [...new Set(allLoja.map(r => r.ano))].sort();
