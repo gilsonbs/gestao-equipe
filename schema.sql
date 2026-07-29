@@ -74,9 +74,13 @@ CREATE TABLE IF NOT EXISTS folgas (
 -- Top Produtos
 CREATE TABLE IF NOT EXISTS produtos_top (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  codigo_produto bigint,
   nome text NOT NULL,
   substancia text,
   categoria text,
+  laboratorio text,
+  preco_custo numeric(10,2),
+  preco_venda numeric(10,2),
   quantidade integer,
   mes integer CHECK (mes BETWEEN 1 AND 12),
   ano integer CHECK (ano >= 2020),

@@ -20,7 +20,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </div>
     <div class="card-body">
       <p style="font-size:.875rem;color:#64748b;margin-bottom:1rem">
-        O arquivo CSV deve ter as colunas: <strong>nome, substancia, categoria, quantidade, mes, ano</strong>
+        O arquivo CSV deve ter as colunas: <strong>nome, substancia, categoria</strong> (obrigatório: nome).
+        Colunas opcionais: <strong>laboratorio, preco_venda, preco_custo, codigo_produto, quantidade, mes, ano</strong>
       </p>
       <div class="form-group">
         <label class="form-label">Arquivo CSV</label>
@@ -30,7 +31,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <div style="font-size:.875rem;font-weight:600;margin-bottom:.5rem" id="csv-count"></div>
         <div class="table-wrap" style="max-height:200px;overflow-y:auto">
           <table id="csv-table">
-            <thead><tr><th>Nome</th><th>Substância</th><th>Categoria</th><th>Qtd</th><th>Mês/Ano</th></tr></thead>
+            <thead><tr><th>Nome</th><th>Substância</th><th>Laboratório</th><th>Preço</th><th>Qtd</th><th>Mês/Ano</th></tr></thead>
             <tbody id="csv-tbody"></tbody>
           </table>
         </div>
@@ -53,7 +54,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               <th>#</th>
               <th>Nome</th>
               <th>Substância</th>
-              <th>Categoria</th>
+              <th>Laboratório</th>
+              <th>Preço</th>
               <th>Quantidade</th>
               <th>Período</th>
               <th>Ações</th>
@@ -86,6 +88,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <div class="form-group">
           <label class="form-label">Categoria</label>
           <input class="form-control" id="categoria" placeholder="Ex: Analgésico, Antibiótico..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Laboratório</label>
+          <input class="form-control" id="laboratorio" placeholder="Ex: EMS, Prati-Donaduzzi..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Preço de Venda (R$)</label>
+          <input class="form-control" type="number" id="preco_venda" min="0" step="0.01" placeholder="0,00" />
         </div>
         <div class="form-group">
           <label class="form-label">Quantidade Vendida</label>
@@ -148,7 +158,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <td data-label="Posição"><strong>#${i + 1}</strong></td>
         <td data-label="Nome">${p.nome}</td>
         <td data-label="Substância">${p.substancia ?? '—'}</td>
-        <td data-label="Categoria">${p.categoria ?? '—'}</td>
+        <td data-label="Laboratório">${p.laboratorio ?? '—'}</td>
+        <td data-label="Preço">${p.preco_venda != null ? `R$ ${Number(p.preco_venda).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—'}</td>
         <td data-label="Quantidade">${p.quantidade ?? '—'}</td>
         <td data-label="Período">${p.mes ? `${MESES[p.mes]}/${p.ano}` : '—'}</td>
         <td data-label="Ações" class="cell-actions">
@@ -178,7 +189,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     document.getElementById('modal')!.style.display = 'none';
     document.getElementById('form-error')!.style.display = 'none';
     editingId = null;
-    ['nome','substancia','categoria','quantidade','mes','ano'].forEach(id => {
+    ['nome','substancia','categoria','laboratorio','preco_venda','quantidade','mes','ano'].forEach(id => {
       (document.getElementById(id) as HTMLInputElement).value = '';
     });
   }
@@ -198,6 +209,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     (document.getElementById('nome') as HTMLInputElement).value = data.nome;
     (document.getElementById('substancia') as HTMLInputElement).value = data.substancia ?? '';
     (document.getElementById('categoria') as HTMLInputElement).value = data.categoria ?? '';
+    (document.getElementById('laboratorio') as HTMLInputElement).value = data.laboratorio ?? '';
+    (document.getElementById('preco_venda') as HTMLInputElement).value = data.preco_venda ?? '';
     (document.getElementById('quantidade') as HTMLInputElement).value = data.quantidade ?? '';
     (document.getElementById('mes') as HTMLSelectElement).value = data.mes ?? '';
     (document.getElementById('ano') as HTMLInputElement).value = data.ano ?? '';
@@ -215,6 +228,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     const nome = (document.getElementById('nome') as HTMLInputElement).value.trim();
     const substancia = (document.getElementById('substancia') as HTMLInputElement).value.trim() || null;
     const categoria = (document.getElementById('categoria') as HTMLInputElement).value.trim() || null;
+    const laboratorio = (document.getElementById('laboratorio') as HTMLInputElement).value.trim() || null;
+    const precoVendaVal = (document.getElementById('preco_venda') as HTMLInputElement).value;
+    const preco_venda = precoVendaVal ? parseFloat(precoVendaVal) : null;
     const qtd = (document.getElementById('quantidade') as HTMLInputElement).value;
     const quantidade = qtd ? parseInt(qtd) : null;
     const mesVal = (document.getElementById('mes') as HTMLSelectElement).value;
@@ -226,9 +242,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     if (!nome) { errorDiv.textContent = 'Nome é obrigatório.'; errorDiv.style.display = 'block'; return; }
     errorDiv.style.display = 'none';
 
+    const payload = { nome, substancia, categoria, laboratorio, preco_venda, quantidade, mes, ano };
     const { error } = editingId
-      ? await supabase.from('produtos_top').update({ nome, substancia, categoria, quantidade, mes, ano }).eq('id', editingId)
-      : await supabase.from('produtos_top').insert({ nome, substancia, categoria, quantidade, mes, ano });
+      ? await supabase.from('produtos_top').update(payload).eq('id', editingId)
+      : await supabase.from('produtos_top').insert(payload);
 
     if (error) {
       errorDiv.textContent = 'Erro ao salvar o produto: ' + error.message;
@@ -275,16 +292,29 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
 
     csvData = lines.slice(1).map(line => {
-      const cols = line.split(/[,;]/).map(c => c.trim().replace(/^"|"$/g, ''));
+      // Split respeitando campos com vírgula dentro de aspas
+      const cols: string[] = [];
+      let cur = '', inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if ((ch === ',' || ch === ';') && !inQ) { cols.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      cols.push(cur.trim());
+
       const row: any = {};
-      headers.forEach((h, i) => { row[h] = cols[i] ?? ''; });
+      headers.forEach((h, i) => { row[h] = (cols[i] ?? '').replace(/^"|"$/g, '').trim(); });
       return {
-        nome: row.nome || '',
-        substancia: row.substancia || null,
-        categoria: row.categoria || null,
-        quantidade: row.quantidade ? parseInt(row.quantidade) : null,
-        mes: row.mes ? parseInt(row.mes) : null,
-        ano: row.ano ? parseInt(row.ano) : null,
+        nome:           row.nome || '',
+        substancia:     row.substancia || null,
+        categoria:      row.categoria || null,
+        laboratorio:    row.laboratorio || null,
+        preco_venda:    row.preco_venda ? parseFloat(row.preco_venda) : null,
+        preco_custo:    row.preco_custo ? parseFloat(row.preco_custo) : null,
+        codigo_produto: row.codigo_produto ? parseInt(row.codigo_produto) : null,
+        quantidade:     row.quantidade ? parseInt(row.quantidade) : null,
+        mes:            row.mes ? parseInt(row.mes) : null,
+        ano:            row.ano ? parseInt(row.ano) : null,
       };
     }).filter(r => r.nome);
 
@@ -294,7 +324,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       <tr>
         <td>${r.nome}</td>
         <td>${r.substancia ?? '—'}</td>
-        <td>${r.categoria ?? '—'}</td>
+        <td>${r.laboratorio ?? '—'}</td>
+        <td>${r.preco_venda != null ? `R$ ${Number(r.preco_venda).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '—'}</td>
         <td>${r.quantidade ?? '—'}</td>
         <td>${r.mes ? `${MESES_ARR[r.mes]}/${r.ano}` : '—'}</td>
       </tr>

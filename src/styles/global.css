@@ -564,7 +564,9 @@ tbody tr:hover td { background: var(--slate-50); }
     min-height: 4.75rem;
     align-items: stretch;
     justify-content: flex-start;
+    padding: 4px 5px;
   }
+  .cal-num { font-size: .72rem; margin-bottom: 2px; }
   .cal-nomes { display: flex; }
   .cal-pontos { display: none; }
 }
@@ -746,6 +748,37 @@ tbody tr:hover td { background: var(--slate-50); }
 
 @media (max-width: 380px) {
   .grid-4 { grid-template-columns: 1fr; }
+}
+
+/* ---------- Ritmo de Vendas ---------- */
+.ritmo-chart { margin-bottom: var(--sp-3); }
+.ritmo-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--sp-4);
+}
+.ritmo-kpi { text-align: center; }
+.ritmo-kpi-label {
+  font-size: .68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  margin-bottom: .2rem;
+}
+.ritmo-kpi-valor {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.ritmo-kpi-sub { font-size: .7rem; color: var(--text-muted); margin-top: .15rem; }
+@media (max-width: 480px) {
+  .ritmo-kpis { grid-template-columns: 1fr 1fr; }
+  .ritmo-kpis .ritmo-kpi:last-child { grid-column: 1 / -1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
