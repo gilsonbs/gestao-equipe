@@ -750,6 +750,27 @@ tbody tr:hover td { background: var(--slate-50); }
   .grid-4 { grid-template-columns: 1fr; }
 }
 
+/* ---------- Comparativo de Períodos ---------- */
+.comp-filtro { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; margin-bottom:var(--sp-4); padding-bottom:var(--sp-3); border-bottom:1px solid var(--border); }
+.comp-periodo { display:flex; align-items:center; gap:var(--sp-2); }
+.comp-leg-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+.comp-vs { font-weight:700; color:var(--text-muted); padding:0 var(--sp-2); }
+.comp-kpis { display:grid; grid-template-columns:1fr auto 1fr; gap:var(--sp-4); align-items:center; }
+.comp-kpi-bloco { background:var(--slate-50); border-radius:var(--radius); overflow:hidden; }
+.comp-kpi-header { padding:var(--sp-2) var(--sp-4); font-size:.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; }
+.comp-kpi-val { padding:0 var(--sp-4) var(--sp-2); font-size:1.4rem; font-weight:700; letter-spacing:-.02em; }
+.comp-kpi-meta { padding:0 var(--sp-4) var(--sp-3); font-size:.75rem; color:var(--text-muted); }
+.comp-delta { text-align:center; padding:0 var(--sp-3); }
+.comp-delta-pct { font-size:1.3rem; font-weight:700; }
+.comp-delta.pos .comp-delta-pct { color:var(--success); }
+.comp-delta.neg .comp-delta-pct { color:var(--danger); }
+.comp-delta-abs { font-size:.75rem; color:var(--text-muted); margin-top:2px; }
+@media (max-width:640px) {
+  .comp-kpis { grid-template-columns:1fr; }
+  .comp-delta { text-align:left; display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-2) 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  .comp-delta-abs { margin-top:0; }
+}
+
 /* ---------- Ritmo de Vendas ---------- */
 .ritmo-chart { margin-bottom: var(--sp-3); }
 .ritmo-kpis {
