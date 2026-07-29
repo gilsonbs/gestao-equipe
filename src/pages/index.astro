@@ -75,6 +75,15 @@ const anoAtual = now.getFullYear();
     </div>
   </section>
 
+  <!-- Ritmo de Vendas (só aparece quando há meta da loja definida) -->
+  <section id="ritmo-section" class="card section" hidden>
+    <div class="card-header">
+      <span class="card-title">📈 Ritmo de Vendas</span>
+      <span id="ritmo-status" class="badge"></span>
+    </div>
+    <div class="card-body" id="ritmo-body"></div>
+  </section>
+
   <div class="grid-2 section">
     <!-- Metas dos Funcionários -->
     <div class="card">
@@ -187,6 +196,119 @@ const anoAtual = now.getFullYear();
   function getMes() { return parseInt(selMes.value); }
   function getAno() { return parseInt(selAno.value); }
 
+  // ===== RITMO DE VENDAS =====
+  function gerarGraficoRitmo(diasNoMes: number, diaDecorrido: number, meta: number, realizado: number, projecao: number, cls: string) {
+    const W = 400, H = 130;
+    const pad = { t: 8, r: 12, b: 24, l: 52 };
+    const aw = W - pad.l - pad.r;
+    const ah = H - pad.t - pad.b;
+    const yMax = Math.max(meta, projecao, 1) * 1.06;
+    const xS = (d: number) => (pad.l + (d / diasNoMes) * aw).toFixed(1);
+    const yS = (v: number) => (pad.t + ah - (v / yMax) * ah).toFixed(1);
+    const clrMap: Record<string, string> = { success: 'var(--success)', warning: 'var(--warning)', danger: 'var(--danger)' };
+    const clr = clrMap[cls] ?? 'var(--accent)';
+    const fmtShort = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v));
+
+    const gridVals = [0, meta / 2, meta];
+    const gridLines = gridVals.map(v => {
+      const y = yS(v);
+      return `<line x1="${pad.l}" y1="${y}" x2="${pad.l + aw}" y2="${y}" stroke="var(--slate-200)" stroke-width="1"/>`;
+    }).join('');
+    const yLabels = gridVals.map(v => {
+      const y = (parseFloat(yS(v)) + 3.5).toFixed(1);
+      return `<text x="${pad.l - 4}" y="${y}" text-anchor="end" font-size="9" fill="var(--text-muted)">R$${fmtShort(v)}</text>`;
+    }).join('');
+
+    const paceD = `M${xS(0)} ${yS(0)} L${xS(diasNoMes)} ${yS(meta)}`;
+    const actualD = diaDecorrido > 0 ? `M${xS(0)} ${yS(0)} L${xS(diaDecorrido)} ${yS(realizado)}` : '';
+    const projD = diaDecorrido > 0 && diaDecorrido < diasNoMes
+      ? `M${xS(diaDecorrido)} ${yS(realizado)} L${xS(diasNoMes)} ${yS(projecao)}` : '';
+
+    const todayLine = diaDecorrido > 0 && diaDecorrido < diasNoMes
+      ? `<line x1="${xS(diaDecorrido)}" y1="${pad.t}" x2="${xS(diaDecorrido)}" y2="${pad.t + ah}" stroke="var(--slate-300)" stroke-width="1" stroke-dasharray="3,3"/>`
+      : '';
+    const dotActual = diaDecorrido > 0
+      ? `<circle cx="${xS(diaDecorrido)}" cy="${yS(realizado)}" r="3.5" fill="${clr}"/>`
+      : '';
+    const dotProj = diaDecorrido > 0 && diaDecorrido < diasNoMes
+      ? `<circle cx="${xS(diasNoMes)}" cy="${yS(projecao)}" r="3" fill="${clr}" fill-opacity=".4" stroke="${clr}" stroke-width="1.5"/>`
+      : '';
+
+    const xLbls = [1, Math.round(diasNoMes / 2), diasNoMes].map(d =>
+      `<text x="${xS(d)}" y="${H - 4}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${d}</text>`
+    ).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
+      ${gridLines}${yLabels}${todayLine}
+      <path d="${paceD}" fill="none" stroke="var(--slate-300)" stroke-width="1.5" stroke-dasharray="4,3"/>
+      ${actualD ? `<path d="${actualD}" fill="none" stroke="${clr}" stroke-width="2.5"/>` : ''}
+      ${projD ? `<path d="${projD}" fill="none" stroke="${clr}" stroke-width="1.5" stroke-dasharray="5,4" stroke-opacity=".75"/>` : ''}
+      ${dotActual}${dotProj}${xLbls}
+    </svg>`;
+  }
+
+  function renderRitmo(lojaData: any, mes: number, ano: number) {
+    const section = document.getElementById('ritmo-section') as HTMLElement;
+    if (!lojaData) { section.hidden = true; return; }
+    const meta = Number(lojaData.valor_meta ?? 0);
+    const realizado = Number(lojaData.valor_realizado ?? 0);
+    if (meta <= 0) { section.hidden = true; return; }
+
+    section.hidden = false;
+
+    const diasNoMes = new Date(ano, mes, 0).getDate();
+    const hoje = new Date();
+    const ehMesAtual = hoje.getMonth() + 1 === mes && hoje.getFullYear() === ano;
+    const ehMesFuturo = ano > hoje.getFullYear() || (ano === hoje.getFullYear() && mes > hoje.getMonth() + 1);
+
+    const diaDecorrido = ehMesAtual ? hoje.getDate() : ehMesFuturo ? 0 : diasNoMes;
+    const diasRestantes = ehMesAtual ? diasNoMes - hoje.getDate() : 0;
+
+    const ritmoAtual = diaDecorrido > 0 ? realizado / diaDecorrido : 0;
+    const projecao = ritmoAtual > 0 ? Math.round(ritmoAtual * diasNoMes) : realizado;
+    const necessarioPorDia = diasRestantes > 0 ? Math.max(meta - realizado, 0) / diasRestantes : 0;
+
+    const cls = projecao >= meta ? 'success' : projecao >= meta * 0.85 ? 'warning' : 'danger';
+    const clsLabels: Record<string, string> = { success: 'No ritmo ✓', warning: 'Atenção ⚠️', danger: 'Abaixo do ritmo' };
+
+    const statusBadge = document.getElementById('ritmo-status')!;
+    statusBadge.textContent = clsLabels[cls];
+    statusBadge.className = `badge badge-${cls}`;
+
+    const fmt = (v: number) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
+
+    type KpiItem = { label: string; valor: string; sub: string; highlight: boolean };
+    const kpis: KpiItem[] = [
+      { label: 'Realizado', valor: fmt(realizado), sub: `de ${fmt(meta)} de meta`, highlight: false },
+      {
+        label: diasRestantes > 0 ? 'Necessário/dia' : 'Média/dia',
+        valor: fmt(diasRestantes > 0 ? necessarioPorDia : ritmoAtual),
+        sub: diasRestantes > 0 ? `para bater a meta em ${diasRestantes} dias` : 'ao longo do mês',
+        highlight: false,
+      },
+      {
+        label: 'Projeção final',
+        valor: fmt(projecao),
+        sub: projecao >= meta ? `acima da meta (${fmt(projecao - meta)})` : `falta ${fmt(meta - projecao)}`,
+        highlight: true,
+      },
+    ];
+
+    const body = document.getElementById('ritmo-body')!;
+    body.innerHTML = `
+      <div class="ritmo-chart">${gerarGraficoRitmo(diasNoMes, diaDecorrido, meta, realizado, projecao, cls)}</div>
+      <div class="ritmo-kpis">
+        ${kpis.map(k => {
+          const style = k.highlight ? ` style="color:var(--${cls})"` : '';
+          return `<div class="ritmo-kpi">
+            <div class="ritmo-kpi-label">${k.label}</div>
+            <div class="ritmo-kpi-valor"${style}>${k.valor}</div>
+            <div class="ritmo-kpi-sub">${k.sub}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
   // ===== STATS =====
   async function loadStats() {
     const mes = getMes(); const ano = getAno();
@@ -240,6 +362,8 @@ const anoAtual = now.getFullYear();
 
     document.getElementById('stat-folgas')!.querySelector('.stat-value')!.textContent =
       String(folgasRes.count ?? 0);
+
+    renderRitmo(lojaRes.data, mes, ano);
   }
 
   // ===== METAS =====
