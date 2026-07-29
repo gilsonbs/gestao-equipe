@@ -1,0 +1,373 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Relatório de Vendas" active="relatorio">
+
+  <!-- Filtro de ano -->
+  <div class="card rel-card">
+    <div class="card-body" style="padding:var(--sp-3) var(--sp-4);display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap">
+      <span class="rel-filter-label">Período</span>
+      <div id="ano-tabs" style="display:flex;gap:var(--sp-2);flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm ano-tab active" data-ano="">Todos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid-4 rel-card">
+    <div class="stat-card"><div class="stat-label">Total Vendido</div><div class="stat-value" id="kpi-total">—</div><div class="stat-sub" id="kpi-total-sub">no período</div></div>
+    <div class="stat-card"><div class="stat-label">Melhor Mês</div><div class="stat-value" id="kpi-melhor">—</div><div class="stat-sub" id="kpi-melhor-sub">—</div></div>
+    <div class="stat-card"><div class="stat-label">Média Mensal</div><div class="stat-value" id="kpi-media">—</div><div class="stat-sub">meses com lançamento</div></div>
+    <div class="stat-card"><div class="stat-label">Var. Último Mês</div><div class="stat-value" id="kpi-var">—</div><div class="stat-sub" id="kpi-var-sub">vs mês anterior</div></div>
+  </div>
+
+  <!-- Chart: Evolução mensal -->
+  <div class="card rel-card">
+    <div class="card-header">
+      <span class="card-title">📊 Evolução Mensal de Vendas</span>
+      <span class="rel-legenda">
+        <span class="rel-leg-item"><span class="rel-leg-bar" style="background:var(--accent)"></span>Vendas</span>
+        <span class="rel-leg-item"><span class="rel-leg-dash"></span>Meta</span>
+      </span>
+    </div>
+    <div class="card-body" style="padding:var(--sp-3) var(--sp-4) var(--sp-4)">
+      <div id="chart-vendas-wrap" style="overflow-x:auto">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chart: MoM -->
+  <div class="card rel-card">
+    <div class="card-header">
+      <span class="card-title">📈 Variação Mês a Mês</span>
+      <span class="rel-legenda">
+        <span class="rel-leg-item"><span class="rel-leg-bar" style="background:var(--success)"></span>Alta</span>
+        <span class="rel-leg-item"><span class="rel-leg-bar" style="background:var(--danger)"></span>Queda</span>
+      </span>
+    </div>
+    <div class="card-body" style="padding:var(--sp-3) var(--sp-4) var(--sp-4)">
+      <div id="chart-mom-wrap" style="overflow-x:auto">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela por funcionário -->
+  <div class="card rel-card">
+    <div class="card-header">
+      <span class="card-title">👥 Vendas por Funcionário</span>
+    </div>
+    <div id="tabela-func-wrap" style="padding:0">
+      <div class="loading" style="padding:var(--sp-4)"><div class="spinner"></div> Carregando...</div>
+    </div>
+  </div>
+
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  const MESES_SHORT = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+  type LojaMes = { mes: number; ano: number; valor_meta: number; valor_realizado: number; percentual: number | null };
+  type FuncVenda = { mes: number; ano: number; valor: number; funcionarios: { nome: string } | null };
+
+  let allLoja: LojaMes[] = [];
+  let allFuncVendas: FuncVenda[] = [];
+  let filtroAno = 0;
+
+  async function loadAll() {
+    const [lojaRes, funcRes] = await Promise.all([
+      supabase.from('desempenho_loja').select('mes, ano, valor_meta, valor_realizado, percentual').gte('ano', 2025).order('ano').order('mes'),
+      supabase.from('vendas_funcionario').select('mes, ano, valor, funcionarios(nome)').gte('ano', 2025).order('ano').order('mes'),
+    ]);
+
+    allLoja = (lojaRes.data ?? []) as LojaMes[];
+    allFuncVendas = (funcRes.data ?? []) as FuncVenda[];
+
+    // Popula tabs de ano dinamicamente com os anos que têm dados
+    const anos = [...new Set(allLoja.map(r => r.ano))].sort();
+    const tabs = document.getElementById('ano-tabs')!;
+    anos.forEach(a => {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-ghost btn-sm ano-tab';
+      btn.dataset.ano = String(a);
+      btn.textContent = String(a);
+      tabs.appendChild(btn);
+    });
+    tabs.querySelectorAll('.ano-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabs.querySelectorAll('.ano-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filtroAno = parseInt((btn as HTMLElement).dataset.ano ?? '0') || 0;
+        render();
+      });
+    });
+
+    render();
+  }
+
+  function chave(mes: number, ano: number) {
+    return `${ano}-${String(mes).padStart(2, '0')}`;
+  }
+
+  function label(k: string) {
+    const [ano, m] = k.split('-');
+    return `${MESES_SHORT[parseInt(m)]}/${ano.slice(2)}`;
+  }
+
+  function fmt(v: number) {
+    return `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
+  }
+
+  function fmtK(v: number) {
+    if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+    if (v >= 1000) return `${(v / 1000).toFixed(0)}k`;
+    return String(Math.round(v));
+  }
+
+  function render() {
+    const loja = filtroAno ? allLoja.filter(r => r.ano === filtroAno) : allLoja;
+    const funcVendas = filtroAno ? allFuncVendas.filter(r => r.ano === filtroAno) : allFuncVendas;
+
+    // Meses ordenados que têm algum dado de loja
+    const meses = loja.map(r => chave(r.mes, r.ano));
+    const vendaMap = new Map<string, number>(loja.map(r => [chave(r.mes, r.ano), Number(r.valor_realizado)]));
+    const metaMap  = new Map<string, number>(loja.filter(r => Number(r.valor_meta) > 0).map(r => [chave(r.mes, r.ano), Number(r.valor_meta)]));
+
+    renderKpis(meses, vendaMap);
+    renderChartVendas(meses, vendaMap, metaMap);
+    renderChartMoM(meses, vendaMap);
+    renderTabelaFunc(meses, funcVendas);
+  }
+
+  // ===== KPIs =====
+  function renderKpis(meses: string[], vendaMap: Map<string, number>) {
+    const valores = meses.map(m => vendaMap.get(m) ?? 0);
+    const comVenda = valores.filter(v => v > 0);
+    const total = comVenda.reduce((s, v) => s + v, 0);
+    const media = comVenda.length ? total / comVenda.length : 0;
+
+    const melhorVal = comVenda.length ? Math.max(...comVenda) : 0;
+    const melhorIdx = valores.indexOf(melhorVal);
+
+    document.getElementById('kpi-total')!.textContent = total > 0 ? fmt(total) : '—';
+    document.getElementById('kpi-total-sub')!.textContent = `${comVenda.length} meses com lançamento`;
+    document.getElementById('kpi-melhor')!.textContent = melhorVal > 0 ? fmt(melhorVal) : '—';
+    document.getElementById('kpi-melhor-sub')!.textContent = melhorVal > 0 ? label(meses[melhorIdx]) : '—';
+    document.getElementById('kpi-media')!.textContent = media > 0 ? fmt(media) : '—';
+
+    const varEl = document.getElementById('kpi-var')!;
+    const varSubEl = document.getElementById('kpi-var-sub')!;
+    const comDados = meses.filter(m => (vendaMap.get(m) ?? 0) > 0);
+    if (comDados.length >= 2) {
+      const ult = vendaMap.get(comDados.at(-1)!)!;
+      const ant = vendaMap.get(comDados.at(-2)!)!;
+      const pct = ant > 0 ? ((ult - ant) / ant) * 100 : 0;
+      varEl.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+      varEl.style.color = pct >= 0 ? 'var(--success)' : 'var(--danger)';
+      varSubEl.textContent = `${label(comDados.at(-1)!)} vs ${label(comDados.at(-2)!)}`;
+    } else {
+      varEl.textContent = '—';
+      varEl.style.color = '';
+      varSubEl.textContent = 'menos de 2 meses';
+    }
+  }
+
+  // ===== GRÁFICO EVOLUÇÃO MENSAL =====
+  function renderChartVendas(meses: string[], vendaMap: Map<string, number>, metaMap: Map<string, number>) {
+    const wrap = document.getElementById('chart-vendas-wrap')!;
+    if (meses.length === 0) {
+      wrap.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>Nenhum dado de vendas ainda</div>';
+      return;
+    }
+
+    const barW = 38, gap = 10, padL = 60, padR = 20, padT = 24, padB = 40;
+    const chartH = 200;
+    const aw = meses.length * (barW + gap) - gap;
+    const W = padL + aw + padR;
+    const H = chartH + padT + padB;
+
+    const valores = meses.map(m => vendaMap.get(m) ?? 0);
+    const metaVals = meses.map(m => metaMap.get(m) ?? 0);
+    const yMax = Math.max(...valores, ...metaVals, 1) * 1.12;
+
+    const xC = (i: number) => padL + i * (barW + gap) + barW / 2; // centro da barra
+    const xL = (i: number) => padL + i * (barW + gap);            // esquerda da barra
+    const yS = (v: number) => padT + chartH - (v / yMax) * chartH;
+
+    // Grid Y
+    const nGrid = 4;
+    const grids = Array.from({ length: nGrid + 1 }, (_, i) => (yMax / nGrid) * i);
+    const gridLines = grids.map(v => {
+      const y = yS(v).toFixed(1);
+      return `<line x1="${padL}" y1="${y}" x2="${padL + aw}" y2="${y}" stroke="var(--slate-200)" stroke-width="1"/>
+              <text x="${padL - 6}" y="${(parseFloat(y) + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="var(--text-muted)">R$${fmtK(v)}</text>`;
+    }).join('');
+
+    // Linha de meta (conecta centros onde há meta)
+    const metaPts = meses.map((m, i) => metaMap.has(m) ? `${xC(i).toFixed(1)},${yS(metaMap.get(m)!).toFixed(1)}` : null).filter(Boolean);
+    const metaLine = metaPts.length >= 2
+      ? `<polyline points="${metaPts.join(' ')}" fill="none" stroke="var(--slate-400)" stroke-width="1.5" stroke-dasharray="5,3"/>`
+      : '';
+    const metaDots = meses.flatMap((m, i) => metaMap.has(m)
+      ? [`<circle cx="${xC(i).toFixed(1)}" cy="${yS(metaMap.get(m)!).toFixed(1)}" r="2.5" fill="var(--surface)" stroke="var(--slate-400)" stroke-width="1.5"/>`]
+      : []).join('');
+
+    // Barras
+    const bars = meses.map((m, i) => {
+      const v = vendaMap.get(m) ?? 0;
+      const meta = metaMap.get(m) ?? 0;
+      const bH = Math.max((v / yMax) * chartH, v > 0 ? 2 : 0);
+      const yBar = padT + chartH - bH;
+      const color = meta > 0
+        ? (v >= meta ? 'var(--success)' : v >= meta * 0.7 ? 'var(--warning)' : 'var(--accent)')
+        : 'var(--accent)';
+      const tipText = v > 0
+        ? `${label(m)}: ${fmt(v)}${meta > 0 ? ` · meta ${fmt(meta)}` : ''}`
+        : `${label(m)}: sem lançamento`;
+
+      return `<g>
+        <title>${tipText}</title>
+        ${v > 0 ? `<rect x="${xL(i)}" y="${yBar.toFixed(1)}" width="${barW}" height="${bH.toFixed(1)}" fill="${color}" rx="3"/>` : ''}
+        ${v > 0 && bH > 18 ? `<text x="${xC(i).toFixed(1)}" y="${(yBar - 5).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--text-muted)">R$${fmtK(v)}</text>` : ''}
+        <text x="${xC(i).toFixed(1)}" y="${H - padB + 14}" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">${label(m)}</text>
+      </g>`;
+    }).join('');
+
+    // Eixo Y
+    const eixoY = `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + chartH}" stroke="var(--slate-200)" stroke-width="1"/>`;
+
+    wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${Math.max(W, 400)}" height="${H}" style="display:block;min-width:${Math.max(W, 400)}px">
+      ${gridLines}${eixoY}
+      ${bars}
+      ${metaLine}${metaDots}
+    </svg>`;
+  }
+
+  // ===== GRÁFICO MoM =====
+  function renderChartMoM(meses: string[], vendaMap: Map<string, number>) {
+    const wrap = document.getElementById('chart-mom-wrap')!;
+    const comVenda = meses.filter(m => (vendaMap.get(m) ?? 0) > 0);
+    if (comVenda.length < 2) {
+      wrap.innerHTML = '<div class="empty"><div class="empty-icon">📈</div>Precisa de pelo menos 2 meses com lançamento</div>';
+      return;
+    }
+
+    const deltas = comVenda.slice(1).map((m, i) => {
+      const curr = vendaMap.get(m)!;
+      const prev = vendaMap.get(comVenda[i])!;
+      const pct = prev > 0 ? ((curr - prev) / prev) * 100 : 0;
+      return { m, pct, curr, prev };
+    });
+
+    const barW = 38, gap = 10, padL = 52, padR = 20, padT = 16, padB = 40;
+    const halfH = 90;
+    const H = halfH * 2 + padT + padB;
+    const aw = deltas.length * (barW + gap) - gap;
+    const W = padL + aw + padR;
+    const maxAbs = Math.max(...deltas.map(d => Math.abs(d.pct)), 5);
+
+    const xC = (i: number) => padL + i * (barW + gap) + barW / 2;
+    const xL = (i: number) => padL + i * (barW + gap);
+    const baseline = padT + halfH;
+
+    const barsHtml = deltas.map((d, i) => {
+      const isPos = d.pct >= 0;
+      const color = isPos ? 'var(--success)' : 'var(--danger)';
+      const bH = Math.max((Math.abs(d.pct) / maxAbs) * (halfH - 10), 2);
+      const yRect = isPos ? baseline - bH : baseline;
+      const labelY = isPos ? yRect - 5 : yRect + bH + 13;
+      const sign = isPos ? '+' : '';
+      const tipText = `${label(d.m)}: ${sign}${d.pct.toFixed(1)}% (${fmt(d.prev)} → ${fmt(d.curr)})`;
+
+      return `<g>
+        <title>${tipText}</title>
+        <rect x="${xL(i)}" y="${yRect.toFixed(1)}" width="${barW}" height="${bH.toFixed(1)}" fill="${color}" rx="3"/>
+        <text x="${xC(i).toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle" font-size="9" fill="${color}" font-weight="600">${sign}${d.pct.toFixed(1)}%</text>
+        <text x="${xC(i).toFixed(1)}" y="${H - padB + 14}" text-anchor="middle" font-size="9.5" fill="var(--text-muted)">${label(d.m)}</text>
+      </g>`;
+    }).join('');
+
+    wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${Math.max(W, 400)}" height="${H}" style="display:block;min-width:${Math.max(W, 400)}px">
+      <line x1="${padL}" y1="${baseline}" x2="${padL + aw}" y2="${baseline}" stroke="var(--slate-300)" stroke-width="1.5"/>
+      <text x="${padL - 6}" y="${(baseline + 3.5).toFixed(1)}" text-anchor="end" font-size="9.5" fill="var(--text-muted)">0%</text>
+      <text x="${padL - 6}" y="${(padT + 4).toFixed(1)}" text-anchor="end" font-size="9.5" fill="var(--success)">+${maxAbs.toFixed(0)}%</text>
+      <text x="${padL - 6}" y="${(padT + halfH * 2 + 4).toFixed(1)}" text-anchor="end" font-size="9.5" fill="var(--danger)">-${maxAbs.toFixed(0)}%</text>
+      ${barsHtml}
+    </svg>`;
+  }
+
+  // ===== TABELA POR FUNCIONÁRIO =====
+  function renderTabelaFunc(meses: string[], funcVendas: FuncVenda[]) {
+    const wrap = document.getElementById('tabela-func-wrap')!;
+    if (funcVendas.length === 0) {
+      wrap.innerHTML = '<div class="empty" style="padding:var(--sp-5)"><div class="empty-icon">👥</div>Nenhum dado de vendas por funcionário</div>';
+      return;
+    }
+
+    // Pivô: chave(mes,ano) → { nome → valor }
+    const nomes = [...new Set(funcVendas.map(f => f.funcionarios?.nome ?? '—'))].sort();
+    const pivot = new Map<string, Record<string, number>>();
+    funcVendas.forEach(f => {
+      const k = chave(f.mes, f.ano);
+      if (!pivot.has(k)) pivot.set(k, {});
+      const nome = f.funcionarios?.nome ?? '—';
+      pivot.get(k)![nome] = Number(f.valor);
+    });
+
+    // Totais por funcionário para o rodapé
+    const totaisPorFunc: Record<string, number> = {};
+    nomes.forEach(n => { totaisPorFunc[n] = 0; });
+    let totalGeral = 0;
+
+    const mesesComFunc = meses.filter(m => pivot.has(m));
+    const rows = mesesComFunc.map(m => {
+      const dados = pivot.get(m)!;
+      const totalMes = nomes.reduce((s, n) => s + (dados[n] ?? 0), 0);
+      totalGeral += totalMes;
+      nomes.forEach(n => { totaisPorFunc[n] += dados[n] ?? 0; });
+      const cols = nomes.map(n => {
+        const v = dados[n] ?? 0;
+        return `<td data-label="${n.split(' ')[0]}">${v > 0 ? `R$ ${Math.round(v).toLocaleString('pt-BR')}` : '—'}</td>`;
+      }).join('');
+      return `<tr>
+        <td data-label="Mês"><strong>${label(m)}</strong></td>
+        ${cols}
+        <td data-label="Total" style="font-weight:700">R$ ${Math.round(totalMes).toLocaleString('pt-BR')}</td>
+      </tr>`;
+    }).join('');
+
+    const rodapeCols = nomes.map(n =>
+      `<td style="font-weight:700;color:var(--accent)">R$ ${Math.round(totaisPorFunc[n]).toLocaleString('pt-BR')}</td>`
+    ).join('');
+
+    const headerCols = nomes.map(n => `<th>${n.split(' ')[0]}</th>`).join('');
+
+    wrap.innerHTML = `<div class="table-wrap"><table class="table-cards">
+      <thead><tr><th>Mês</th>${headerCols}<th>Total Loja</th></tr></thead>
+      <tbody>
+        ${rows}
+        <tr style="background:var(--slate-50);border-top:2px solid var(--border)">
+          <td style="font-weight:700;font-size:.8rem;color:var(--text-muted);text-transform:uppercase">TOTAL</td>
+          ${rodapeCols}
+          <td style="font-weight:700;color:var(--accent)">R$ ${Math.round(totalGeral).toLocaleString('pt-BR')}</td>
+        </tr>
+      </tbody>
+    </table></div>`;
+  }
+
+  loadAll();
+</script>
+
+<style>
+  .rel-card { margin-bottom: var(--sp-5); }
+  .rel-filter-label { font-size: .75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; flex-shrink: 0; }
+  .ano-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .rel-legenda { display: flex; gap: var(--sp-4); align-items: center; flex-wrap: wrap; }
+  .rel-leg-item { display: flex; align-items: center; gap: 5px; font-size: .75rem; color: var(--text-muted); }
+  .rel-leg-bar { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+  .rel-leg-dash { display: inline-block; width: 18px; height: 0; border-top: 2px dashed var(--slate-400); }
+</style>
+</AdminLayout>
