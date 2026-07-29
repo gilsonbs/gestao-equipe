@@ -195,7 +195,7 @@ const anoAtual = now.getFullYear();
       supabase.from('desempenho_loja').select('*').eq('mes', mes).eq('ano', ano).maybeSingle(),
       supabase.from('desempenho_mensal').select('valor_meta, percentual').eq('mes', mes).eq('ano', ano),
       supabase.from('folgas').select('id', { count: 'exact', head: true })
-        .gte('data_inicio', inicio).lte('data_inicio', fim),
+        .lte('data_inicio', fim).gte('data_fim', inicio),
     ]);
 
     const totalLoja = Number(lojaRes.data?.valor_realizado ?? 0);
@@ -258,7 +258,12 @@ const anoAtual = now.getFullYear();
       body.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div>Nenhuma meta lançada para este período</div>';
       return;
     }
-    body.innerHTML = data.map((m: any) => {
+    const totalRealizado = data.reduce((s: number, m: any) => s + Number(m.valor_realizado ?? 0), 0);
+    const totalMeta = data.reduce((s: number, m: any) => s + Number(m.valor_meta ?? 0), 0);
+    const pctGeral = totalMeta > 0 ? Math.round((totalRealizado / totalMeta) * 100) : 0;
+    const clsGeral = pctGeral >= 100 ? 'success' : pctGeral >= 70 ? 'warning' : 'danger';
+
+    const linhasHtml = data.map((m: any) => {
       const pctReal = Number(m.percentual ?? 0);
       const pct = Math.min(pctReal, 100);
       const cls = pctReal >= 100 ? 'success' : pctReal >= 70 ? 'warning' : 'danger';
@@ -266,20 +271,36 @@ const anoAtual = now.getFullYear();
       return `<div style="margin-bottom:1rem">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
           <div>
-            <span style="font-weight:600">${m.nome ?? '—'}</span>
-            ${m.cargo ? `<span style="font-size:.75rem;color:#64748b;margin-left:.5rem">${m.cargo}</span>` : ''}
+            <span style="font-weight:600">${escapeHtml(m.nome ?? '—')}</span>
+            ${m.cargo ? `<span style="font-size:.75rem;color:var(--text-muted);margin-left:.5rem">${escapeHtml(m.cargo)}</span>` : ''}
           </div>
           <span style="font-weight:700;color:${color}">${pctReal}%</span>
         </div>
         <div class="progress" style="margin-bottom:.3rem">
           <div class="progress-bar ${cls}" style="width:${pct}%"></div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#64748b">
+        <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--text-muted)">
           <span>Realizado: R$ ${Number(m.valor_realizado).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
           <span>Meta: R$ ${Number(m.valor_meta).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
         </div>
       </div>`;
     }).join('');
+
+    const resumoHtml = data.length > 1 ? `<div style="margin-top:.5rem;padding-top:.75rem;border-top:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem">
+        <span style="font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Total da equipe</span>
+        <span style="font-weight:700;color:var(--${clsGeral})">${pctGeral}%</span>
+      </div>
+      <div class="progress" style="margin-bottom:.3rem">
+        <div class="progress-bar ${clsGeral}" style="width:${Math.min(pctGeral,100)}%"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--text-muted)">
+        <span>R$ ${totalRealizado.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+        <span>Meta: R$ ${totalMeta.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+      </div>
+    </div>` : '';
+
+    body.innerHTML = linhasHtml + resumoHtml;
   }
 
   // ===== ANIVERSÁRIOS =====
@@ -321,16 +342,19 @@ const anoAtual = now.getFullYear();
     }
     body.innerHTML = aniv.map((f: any) => {
       const day = parseInt(f.data_nascimento.split('-')[2]);
+      const anoNasc = parseInt(f.data_nascimento.split('-')[0]);
       const birth = new Date(hoje.getFullYear(), mes - 1, day);
       const isToday = birth.getDate() === hoje.getDate() && birth.getMonth() === hoje.getMonth();
       const isPast = birth < hoje && !isToday;
-      return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid #e2e8f0">
-        <div style="font-size:1.5rem;min-width:2rem;text-align:center">${isToday ? '🎉' : isPast ? '🎂' : '🎂'}</div>
+      const idadeAniversario = hoje.getFullYear() - anoNasc;
+      const opacityStyle = isPast ? 'opacity:.6;' : '';
+      return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--border);${opacityStyle}">
+        <div style="font-size:1.5rem;min-width:2rem;text-align:center">${isToday ? '🎉' : '🎂'}</div>
         <div style="flex:1">
-          <div style="font-weight:600${isToday ? ';color:var(--success)' : ''}">${f.nome}${isToday ? ' — Hoje! 🎉' : ''}</div>
-          <div style="font-size:.75rem;color:#64748b">${f.cargo ?? ''} · Dia ${day}</div>
+          <div style="font-weight:600${isToday ? ';color:var(--success)' : ''}">${escapeHtml(f.nome)}${isToday ? ' — Hoje! 🎉' : ''}</div>
+          <div style="font-size:.75rem;color:var(--text-muted)">${escapeHtml(f.cargo ?? '')} · Dia ${day} · ${idadeAniversario} anos</div>
         </div>
-        ${isToday ? '<span class="badge badge-success">Hoje</span>' : ''}
+        ${isToday ? '<span class="badge badge-success">Hoje</span>' : !isPast ? '<span class="badge badge-info">Em breve</span>' : ''}
       </div>`;
     }).join('');
   }
@@ -508,13 +532,15 @@ const anoAtual = now.getFullYear();
       return;
     }
     const maxVal = Math.max(...data.map((v: any) => Number(v.valor)));
-    body.innerHTML = data.map((v: any, i: number) => {
+    const totalVendas = data.reduce((s: number, v: any) => s + Number(v.valor ?? 0), 0);
+
+    const barrasHtml = data.map((v: any, i: number) => {
       const pct = maxVal > 0 ? Math.round((v.valor / maxVal) * 100) : 0;
       const colors = ['var(--accent)','var(--slate-700)','#7c3aed','#dc2626','#d97706'];
       const color = colors[i % colors.length];
       return `<div style="margin-bottom:.75rem">
         <div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
-          <span style="font-weight:500">${(v.funcionarios as any)?.nome ?? '—'}</span>
+          <span style="font-weight:500">${escapeHtml((v.funcionarios as any)?.nome ?? '—')}</span>
           <span style="font-weight:600">R$ ${Number(v.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
         </div>
         <div class="progress">
@@ -522,6 +548,13 @@ const anoAtual = now.getFullYear();
         </div>
       </div>`;
     }).join('');
+
+    const totalHtml = data.length > 1 ? `<div style="margin-top:.25rem;padding-top:.65rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:.85rem">
+      <span style="font-weight:600;color:var(--text-muted)">Total</span>
+      <span style="font-weight:700">R$ ${totalVendas.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+    </div>` : '';
+
+    body.innerHTML = barrasHtml + totalHtml;
   }
 
   // ===== TOP PRODUTOS =====

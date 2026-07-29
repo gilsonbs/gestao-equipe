@@ -564,7 +564,9 @@ tbody tr:hover td { background: var(--slate-50); }
     min-height: 4.75rem;
     align-items: stretch;
     justify-content: flex-start;
+    padding: 4px 5px;
   }
+  .cal-num { font-size: .72rem; margin-bottom: 2px; }
   .cal-nomes { display: flex; }
   .cal-pontos { display: none; }
 }
