@@ -5,8 +5,10 @@ ALTER TABLE vendas_funcionario
 ALTER TABLE vendas_loja
   ADD COLUMN IF NOT EXISTS num_atendimentos integer;
 
--- Recria desempenho_mensal com num_atendimentos e ticket_medio
-CREATE OR REPLACE VIEW desempenho_mensal
+-- DROP + CREATE porque CREATE OR REPLACE não permite adicionar colunas
+-- no meio da lista de colunas de uma view já existente.
+DROP VIEW IF EXISTS desempenho_mensal;
+CREATE VIEW desempenho_mensal
 WITH (security_invoker = on) AS
 SELECT
   COALESCE(m.funcionario_id, v.funcionario_id)      AS funcionario_id,
@@ -39,8 +41,8 @@ JOIN funcionarios f
 
 GRANT SELECT ON desempenho_mensal TO anon, authenticated;
 
--- Recria desempenho_loja com total_atendimentos e ticket_medio
-CREATE OR REPLACE VIEW desempenho_loja
+DROP VIEW IF EXISTS desempenho_loja;
+CREATE VIEW desempenho_loja
 WITH (security_invoker = on) AS
 WITH vendas AS (
   SELECT mes, ano,
