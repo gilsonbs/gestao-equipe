@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS vendas_funcionario (
   mes integer NOT NULL CHECK (mes BETWEEN 1 AND 12),
   ano integer NOT NULL CHECK (ano >= 2020),
   valor numeric(12,2) NOT NULL DEFAULT 0,
+  num_atendimentos integer,
   created_at timestamptz DEFAULT now(),
   UNIQUE(funcionario_id, mes, ano)
 );
@@ -57,6 +58,8 @@ CREATE TABLE IF NOT EXISTS vendas_loja (
   mes integer NOT NULL CHECK (mes BETWEEN 1 AND 12),
   ano integer NOT NULL CHECK (ano >= 2020),
   valor_total numeric(12,2) NOT NULL DEFAULT 0,
+  num_atendimentos integer,
+  data_venda date,
   created_at timestamptz DEFAULT now()
 );
 
@@ -118,6 +121,12 @@ SELECT
   COALESCE(m.ano, v.ano)                            AS ano,
   COALESCE(m.valor_meta, 0)::numeric(12,2)          AS valor_meta,
   COALESCE(v.valor, 0)::numeric(12,2)               AS valor_realizado,
+  v.num_atendimentos,
+  CASE
+    WHEN COALESCE(v.num_atendimentos, 0) > 0
+      THEN ROUND(COALESCE(v.valor, 0) / v.num_atendimentos, 2)::numeric(12,2)
+    ELSE NULL
+  END                                               AS ticket_medio,
   CASE
     WHEN COALESCE(m.valor_meta, 0) > 0
       THEN ROUND((COALESCE(v.valor, 0) / m.valor_meta) * 100)
@@ -142,7 +151,9 @@ GRANT SELECT ON desempenho_mensal TO anon, authenticated;
 CREATE OR REPLACE VIEW desempenho_loja
 WITH (security_invoker = on) AS
 WITH vendas AS (
-  SELECT mes, ano, SUM(valor_total)::numeric(12,2) AS total
+  SELECT mes, ano,
+    SUM(valor_total)::numeric(12,2)  AS total,
+    SUM(num_atendimentos)            AS total_atendimentos
   FROM vendas_loja
   GROUP BY mes, ano
 )
@@ -151,6 +162,12 @@ SELECT
   COALESCE(m.ano, v.ano)                   AS ano,
   COALESCE(m.valor_meta, 0)::numeric(12,2) AS valor_meta,
   COALESCE(v.total, 0)::numeric(12,2)      AS valor_realizado,
+  v.total_atendimentos,
+  CASE
+    WHEN COALESCE(v.total_atendimentos, 0) > 0
+      THEN ROUND(COALESCE(v.total, 0) / v.total_atendimentos, 2)::numeric(12,2)
+    ELSE NULL
+  END                                      AS ticket_medio,
   CASE
     WHEN COALESCE(m.valor_meta, 0) > 0
       THEN ROUND((COALESCE(v.total, 0) / m.valor_meta) * 100)
