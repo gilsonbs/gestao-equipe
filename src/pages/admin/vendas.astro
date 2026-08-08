@@ -44,10 +44,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <div class="table-wrap">
           <table class="table-cards">
             <thead>
-              <tr><th>Funcionário</th><th>Valor (R$)</th><th>Ações</th></tr>
+              <tr><th>Funcionário</th><th>Valor (R$)</th><th>Atend.</th><th>Ticket Médio</th><th>Ações</th></tr>
             </thead>
             <tbody id="tbody-func">
-              <tr><td colspan="3"><div class="loading"><div class="spinner"></div></div></td></tr>
+              <tr><td colspan="5"><div class="loading"><div class="spinner"></div></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -64,14 +64,24 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <div class="table-wrap">
           <table class="table-cards">
             <thead>
-              <tr><th>Total (R$)</th><th>Ações</th></tr>
+              <tr><th>Data</th><th>Total (R$)</th><th>Atend.</th><th>Ticket Médio</th><th>Ações</th></tr>
             </thead>
             <tbody id="tbody-loja">
-              <tr><td colspan="2"><div class="loading"><div class="spinner"></div></div></td></tr>
+              <tr><td colspan="5"><div class="loading"><div class="spinner"></div></div></td></tr>
             </tbody>
           </table>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Progressão de Vendas -->
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-header">
+      <span class="card-title">📈 Progressão de Vendas</span>
+    </div>
+    <div class="card-body" id="progressao-body">
+      <div class="loading"><div class="spinner"></div></div>
     </div>
   </div>
 
@@ -93,6 +103,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <label class="form-label">Valor Total de Vendas (R$) *</label>
           <input class="form-control" type="number" id="vf-valor" min="0" step="0.01" placeholder="0,00" />
         </div>
+        <div class="form-group">
+          <label class="form-label">Nº de Atendimentos</label>
+          <input class="form-control" type="number" id="vf-atend" min="0" step="1" placeholder="Opcional" />
+        </div>
         <div id="vf-error" class="alert alert-danger" style="display:none"></div>
       </div>
       <div class="modal-footer">
@@ -111,8 +125,16 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       </div>
       <div class="modal-body">
         <div class="form-group">
+          <label class="form-label">Data *</label>
+          <input class="form-control" type="date" id="vl-data" />
+        </div>
+        <div class="form-group">
           <label class="form-label">Valor Total de Vendas (R$) *</label>
           <input class="form-control" type="number" id="vl-valor" min="0" step="0.01" placeholder="0,00" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nº de Atendimentos</label>
+          <input class="form-control" type="number" id="vl-atend" min="0" step="1" placeholder="Opcional" />
         </div>
         <div id="vl-error" class="alert alert-danger" style="display:none"></div>
       </div>
@@ -159,6 +181,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     return { mes: parseInt(selMes.value), ano: parseInt(selAno.value) };
   }
 
+  const brl = (v: number) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+  const MESES_NOME = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
   async function loadFuncionarios() {
     const { data } = await supabase.from('funcionarios').select('id, nome').eq('ativo', true).order('nome');
     const sel = document.getElementById('vf-func') as HTMLSelectElement;
@@ -173,62 +200,76 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     const { mes, ano } = getMesAno();
     const { data, error } = await supabase
       .from('vendas_funcionario')
-      .select('id, valor, funcionarios(nome)')
+      .select('id, valor, num_atendimentos, funcionarios(nome)')
       .eq('mes', mes).eq('ano', ano)
       .order('valor', { ascending: false });
 
     const tbody = document.getElementById('tbody-func')!;
     if (error) {
-      tbody.innerHTML = `<tr><td colspan="3"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
       return;
     }
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3"><div class="empty"><div class="empty-icon">💰</div>Nenhuma venda lançada</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="empty-icon">💰</div>Nenhuma venda lançada</div></td></tr>';
       return;
     }
-    tbody.innerHTML = data.map((v: any) => `
+    tbody.innerHTML = data.map((v: any) => {
+      const atend = v.num_atendimentos;
+      const ticket = atend > 0 ? Number(v.valor) / atend : null;
+      return `
       <tr>
         <td data-label="Funcionário">${(v.funcionarios as any)?.nome ?? '—'}</td>
         <td data-label="Valor">R$ ${Number(v.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}</td>
+        <td data-label="Atend.">${atend ?? '—'}</td>
+        <td data-label="Ticket Médio">${ticket != null ? brl(ticket) : '—'}</td>
         <td data-label="Ações" class="cell-actions">
-          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditFunc('${v.id}', ${v.valor})" aria-label="Editar">✏️</button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditFunc('${v.id}', ${v.valor}, ${atend ?? 'null'})" aria-label="Editar">✏️</button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="deleteVendaFunc('${v.id}')" aria-label="Excluir">🗑️</button>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
   }
 
   async function loadVendasLoja() {
     const { mes, ano } = getMesAno();
-    const { data, error } = await supabase.from('vendas_loja').select('*').eq('mes', mes).eq('ano', ano);
+    const { data, error } = await supabase
+      .from('vendas_loja')
+      .select('id, valor_total, num_atendimentos, data_venda')
+      .eq('mes', mes).eq('ano', ano)
+      .order('data_venda', { ascending: false });
+
     const tbody = document.getElementById('tbody-loja')!;
     if (error) {
-      tbody.innerHTML = `<tr><td colspan="2"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5"><div class="alert alert-danger">Erro ao carregar: ${error.message}</div></td></tr>`;
       return;
     }
     if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="2"><div class="empty"><div class="empty-icon">🏪</div>Nenhum lançamento</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="empty-icon">🏪</div>Nenhum lançamento</div></td></tr>';
       return;
     }
-    tbody.innerHTML = data.map((v: any) => `
+    tbody.innerHTML = data.map((v: any) => {
+      const atend = v.num_atendimentos;
+      const ticket = atend > 0 ? Number(v.valor_total) / atend : null;
+      const dataFmt = v.data_venda
+        ? new Date(v.data_venda + 'T12:00:00').toLocaleDateString('pt-BR')
+        : '—';
+      return `
       <tr>
+        <td data-label="Data">${dataFmt}</td>
         <td data-label="Total"><strong>R$ ${Number(v.valor_total).toLocaleString('pt-BR', {minimumFractionDigits:2})}</strong></td>
+        <td data-label="Atend.">${atend ?? '—'}</td>
+        <td data-label="Ticket Médio">${ticket != null ? brl(ticket) : '—'}</td>
         <td data-label="Ações" class="cell-actions">
-          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditLoja('${v.id}', ${v.valor_total})" aria-label="Editar">✏️</button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditLoja('${v.id}', ${v.valor_total}, '${v.data_venda ?? ''}', ${atend ?? 'null'})" aria-label="Editar">✏️</button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="deleteLoja('${v.id}')" aria-label="Excluir">🗑️</button>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
   }
 
-  function load() { loadVendasFunc(); loadVendasLoja(); loadMetaLoja(); }
+  function load() { loadVendasFunc(); loadVendasLoja(); loadMetaLoja(); loadProgressao(); }
 
   // ===== META DA LOJA =====
-  const MESES_NOME = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-
-  const brl = (v: number) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-
   async function loadMetaLoja() {
     const { mes, ano } = getMesAno();
     const body = document.getElementById('meta-loja-body')!;
@@ -256,9 +297,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
 
     const pct = Number(data?.percentual ?? 0);
-    const cls = pct >= 100 ? 'success' : pct >= 70 ? 'warning' : 'danger';
     const cor = pct >= 100 ? 'var(--success)' : pct >= 70 ? 'var(--warning)' : 'var(--danger)';
+    const cls = pct >= 100 ? 'success' : pct >= 70 ? 'warning' : 'danger';
     const falta = meta - realizado;
+    const ticketMeta = data?.ticket_medio != null ? Number(data.ticket_medio) : null;
+    const totalAtend = data?.total_atendimentos != null ? Number(data.total_atendimentos) : null;
 
     body.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-2)">
@@ -269,11 +312,182 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <span style="font-size:1.25rem;font-weight:700;color:${cor}">${pct}%</span>
       </div>
       <div class="progress"><div class="progress-bar ${cls}" style="width:${Math.min(pct, 100)}%"></div></div>
-      <p style="font-size:.8rem;color:var(--text-muted);margin-top:var(--sp-2)">
+      <p style="font-size:.8rem;color:var(--text-muted);margin-top:var(--sp-2);margin-bottom:${ticketMeta != null ? 'var(--sp-2)' : '0'}">
         ${falta > 0
           ? `Faltam ${brl(falta)} para bater a meta de ${MESES_NOME[mes]}.`
           : `Meta batida com ${brl(-falta)} de excedente. 🎉`}
-      </p>`;
+      </p>
+      ${ticketMeta != null ? `<p style="font-size:.8rem;color:var(--text-muted);margin:0">Ticket médio: <strong>${brl(ticketMeta)}</strong>${totalAtend != null ? ` &nbsp;|&nbsp; Atendimentos: <strong>${totalAtend}</strong>` : ''}</p>` : ''}`;
+  }
+
+  // ===== PROGRESSÃO DE VENDAS =====
+  async function loadProgressao() {
+    const { mes, ano } = getMesAno();
+    const body = document.getElementById('progressao-body')!;
+    body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    const [vendasRes, metaRes] = await Promise.all([
+      supabase.from('vendas_loja')
+        .select('valor_total, num_atendimentos, data_venda')
+        .eq('mes', mes).eq('ano', ano)
+        .order('data_venda'),
+      supabase.from('metas_loja')
+        .select('valor_meta')
+        .eq('mes', mes).eq('ano', ano)
+        .maybeSingle(),
+    ]);
+
+    const meta = Number(metaRes.data?.valor_meta ?? 0);
+    const vendas = (vendasRes.data ?? []) as any[];
+    const comData = vendas.filter(v => v.data_venda);
+
+    if (comData.length === 0) {
+      body.innerHTML = `<div class="empty" style="padding:var(--sp-6)">
+        <div class="empty-icon">📈</div>
+        Nenhum lançamento com data para ${MESES_NOME[mes]} de ${ano}.<br>
+        <span style="font-size:.85rem;color:var(--text-muted)">Informe a data ao lançar vendas da loja para visualizar a progressão.</span>
+      </div>`;
+      return;
+    }
+
+    // Agrupa por dia
+    const porDia = new Map<string, { total: number; atend: number }>();
+    for (const v of comData) {
+      const d = v.data_venda as string;
+      const cur = porDia.get(d) ?? { total: 0, atend: 0 };
+      cur.total += Number(v.valor_total);
+      cur.atend += Number(v.num_atendimentos ?? 0);
+      porDia.set(d, cur);
+    }
+
+    const dias = Array.from(porDia.keys()).sort();
+    let acum = 0;
+    const pontos: { d: string; acum: number; diario: number }[] = [];
+    for (const d of dias) {
+      const dia = porDia.get(d)!;
+      acum += dia.total;
+      pontos.push({ d, acum, diario: dia.total });
+    }
+
+    const totalRealizado = acum;
+    const totalAtend = Array.from(porDia.values()).reduce((s, v) => s + v.atend, 0);
+    const ticketMedioLoja = totalAtend > 0 ? totalRealizado / totalAtend : null;
+
+    // KPIs
+    const numDiasComVenda = dias.length;
+    const mediaDiaria = totalRealizado / numDiasComVenda;
+
+    // Dias úteis restantes no mês (aproximação: dias corridos restantes)
+    const hoje = new Date();
+    const ultimoDia = new Date(ano, mes, 0).getDate();
+    const diaHoje = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mes ? hoje.getDate() : ultimoDia;
+    const diasRestantes = ultimoDia - diaHoje;
+    const projecao = totalRealizado + mediaDiaria * diasRestantes;
+    const saldo = meta > 0 ? meta - totalRealizado : null;
+    const pct = meta > 0 ? Math.round((totalRealizado / meta) * 100) : null;
+
+    // Ritmo necessário para bater a meta
+    const ritmoNecessario = (meta > 0 && diasRestantes > 0) ? (meta - totalRealizado) / diasRestantes : null;
+
+    // ---- SVG Chart ----
+    const W = 600, H = 220;
+    const PAD = { top: 16, right: 20, bottom: 36, left: 72 };
+    const cW = W - PAD.left - PAD.right;
+    const cH = H - PAD.top - PAD.bottom;
+
+    const maxY = Math.max(totalRealizado, meta > 0 ? meta : 0, projecao) * 1.08;
+    const toX = (i: number) => PAD.left + (cW / Math.max(pontos.length - 1, 1)) * i;
+    const toY = (v: number) => PAD.top + cH - (v / maxY) * cH;
+
+    const fmt = (v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : String(Math.round(v));
+    const fmtDate = (iso: string) => {
+      const [,, d] = iso.split('-');
+      return d;
+    };
+
+    // Y-axis ticks
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => maxY * f);
+    const yTicksSvg = yTicks.map(v => `
+      <line x1="${PAD.left}" x2="${W - PAD.right}" y1="${toY(v)}" y2="${toY(v)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="${PAD.left - 6}" y="${toY(v) + 4}" text-anchor="end" font-size="10" fill="var(--text-muted)">R$${fmt(v)}</text>
+    `).join('');
+
+    // Meta line
+    const metaLine = meta > 0
+      ? `<line x1="${PAD.left}" x2="${W - PAD.right}" y1="${toY(meta)}" y2="${toY(meta)}" stroke="var(--warning)" stroke-width="1.5" stroke-dasharray="6 3"/>
+         <text x="${W - PAD.right + 4}" y="${toY(meta) + 4}" font-size="9" fill="var(--warning)">Meta</text>`
+      : '';
+
+    // Pace line (projeção linear)
+    const paceLine = pontos.length >= 2
+      ? `<line x1="${toX(0)}" x2="${toX(pontos.length - 1)}" y1="${toY(pontos[0].acum)}" y2="${toY(totalRealizado)}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>`
+      : '';
+
+    // Area fill
+    const areaPath = pontos.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(i)},${toY(p.acum)}`).join(' ')
+      + ` L${toX(pontos.length - 1)},${toY(0)} L${toX(0)},${toY(0)} Z`;
+
+    // Line
+    const linePath = pontos.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(i)},${toY(p.acum)}`).join(' ');
+
+    // X-axis ticks (sample every N to avoid crowding)
+    const maxTicks = 8;
+    const step = Math.ceil(pontos.length / maxTicks);
+    const xTicks = pontos
+      .filter((_, i) => i % step === 0 || i === pontos.length - 1)
+      .map((p, _, arr) => {
+        const i = pontos.indexOf(p);
+        return `<text x="${toX(i)}" y="${H - PAD.bottom + 14}" text-anchor="middle" font-size="10" fill="var(--text-muted)">${fmtDate(p.d)}</text>`;
+      }).join('');
+
+    // Circles on data points (skip if many)
+    const circles = pontos.length <= 20
+      ? pontos.map((p, i) => `<circle cx="${toX(i)}" cy="${toY(p.acum)}" r="3" fill="var(--accent)" stroke="white" stroke-width="1.5"/>`).join('')
+      : '';
+
+    const svgChart = `
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;margin-bottom:var(--sp-4)">
+        <defs>
+          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        ${yTicksSvg}
+        ${metaLine}
+        ${paceLine}
+        <path d="${areaPath}" fill="url(#areaGrad)"/>
+        <path d="${linePath}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        ${circles}
+        ${xTicks}
+        <text x="${PAD.left + cW/2}" y="${H - 2}" text-anchor="middle" font-size="10" fill="var(--text-muted)">Dia do mês</text>
+      </svg>`;
+
+    // KPI cards
+    const kpiCards = [
+      { label: 'Total Realizado', val: brl(totalRealizado), sub: pct != null ? `${pct}% da meta` : '' },
+      { label: 'Média Diária', val: brl(mediaDiaria), sub: `${numDiasComVenda} dia${numDiasComVenda !== 1 ? 's' : ''} lançado${numDiasComVenda !== 1 ? 's' : ''}` },
+      { label: 'Projeção do Mês', val: brl(projecao), sub: `${diasRestantes} dia${diasRestantes !== 1 ? 's' : ''} restante${diasRestantes !== 1 ? 's' : ''}` },
+      { label: saldo != null && saldo > 0 ? 'Falta para Meta' : 'Excedente', val: saldo != null ? brl(Math.abs(saldo)) : '—', sub: saldo != null && saldo <= 0 ? '🎉 Meta batida!' : (ritmoNecessario != null ? `${brl(ritmoNecessario)}/dia necessário` : '') },
+    ];
+
+    if (ticketMedioLoja != null) {
+      kpiCards.push({ label: 'Ticket Médio', val: brl(ticketMedioLoja), sub: `${totalAtend} atendimento${totalAtend !== 1 ? 's' : ''}` });
+    }
+
+    const statsHtml = `<div class="prog-stats">${kpiCards.map(k => `
+      <div class="prog-stat">
+        <div class="prog-stat-label">${k.label}</div>
+        <div class="prog-stat-val">${k.val}</div>
+        ${k.sub ? `<div class="prog-stat-sub">${k.sub}</div>` : ''}
+      </div>`).join('')}</div>`;
+
+    const legendHtml = `<div class="prog-legend">
+      <span class="prog-legend-item"><svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="var(--accent)" stroke-width="2"/></svg> Realizado</span>
+      ${meta > 0 ? `<span class="prog-legend-item"><svg width="16" height="4"><line x1="0" y1="2" x2="16" y2="2" stroke="var(--warning)" stroke-width="1.5" stroke-dasharray="6 3"/></svg> Meta</span>` : ''}
+    </div>`;
+
+    body.innerHTML = statsHtml + svgChart + legendHtml;
   }
 
   (window as any).closeModalMeta = () => {
@@ -303,8 +517,6 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
     errorDiv.style.display = 'none';
 
-    // UNIQUE(mes, ano) permite upsert: redefinir a meta do mesmo mês
-    // sobrescreve em vez de falhar.
     const { error } = await supabase
       .from('metas_loja')
       .upsert({ mes, ano, valor_meta }, { onConflict: 'mes,ano' });
@@ -323,34 +535,36 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     document.getElementById('modal-func')!.style.display = 'none';
     editingFuncId = null;
   };
-  (window as any).openEditFunc = (id: string, valor: number) => {
+  (window as any).openEditFunc = (id: string, valor: number, atend: number | null) => {
     editingFuncId = id;
     document.getElementById('modal-func-title')!.textContent = 'Atualizar Vendas — Funcionário';
     (document.getElementById('vf-valor') as HTMLInputElement).value = String(valor);
+    (document.getElementById('vf-atend') as HTMLInputElement).value = atend != null ? String(atend) : '';
     document.getElementById('modal-func')!.style.display = 'flex';
   };
   document.getElementById('btn-novo-func')?.addEventListener('click', () => {
     editingFuncId = null;
     document.getElementById('modal-func-title')!.textContent = 'Lançar Venda — Funcionário';
     (document.getElementById('vf-valor') as HTMLInputElement).value = '';
+    (document.getElementById('vf-atend') as HTMLInputElement).value = '';
     document.getElementById('modal-func')!.style.display = 'flex';
   });
   document.getElementById('btn-save-func')?.addEventListener('click', async () => {
     const { mes, ano } = getMesAno();
     const funcionario_id = (document.getElementById('vf-func') as HTMLSelectElement).value;
     const valor = parseFloat((document.getElementById('vf-valor') as HTMLInputElement).value);
+    const atendRaw = (document.getElementById('vf-atend') as HTMLInputElement).value.trim();
+    const num_atendimentos = atendRaw !== '' ? parseInt(atendRaw) : null;
     const errorDiv = document.getElementById('vf-error')!;
     if ((!funcionario_id && !editingFuncId) || isNaN(valor)) {
       errorDiv.textContent = 'Preencha todos os campos.'; errorDiv.style.display = 'block'; return;
     }
     errorDiv.style.display = 'none';
 
-    // O UNIQUE(funcionario_id, mes, ano) permite usar upsert: lançar de novo
-    // no mesmo período sobrescreve o valor em vez de falhar.
     const { error } = editingFuncId
-      ? await supabase.from('vendas_funcionario').update({ valor }).eq('id', editingFuncId)
+      ? await supabase.from('vendas_funcionario').update({ valor, num_atendimentos }).eq('id', editingFuncId)
       : await supabase.from('vendas_funcionario')
-          .upsert({ funcionario_id, mes, ano, valor }, { onConflict: 'funcionario_id,mes,ano' });
+          .upsert({ funcionario_id, mes, ano, valor, num_atendimentos }, { onConflict: 'funcionario_id,mes,ano' });
 
     if (error) {
       errorDiv.textContent = 'Erro ao salvar: ' + error.message;
@@ -372,41 +586,49 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     document.getElementById('modal-loja')!.style.display = 'none';
     editingLojaId = null;
   };
-  (window as any).openEditLoja = (id: string, valor: number) => {
+  (window as any).openEditLoja = (id: string, valor: number, dataVenda: string, atend: number | null) => {
     editingLojaId = id;
     document.getElementById('modal-loja-title')!.textContent = 'Editar Vendas da Loja';
+    (document.getElementById('vl-data') as HTMLInputElement).value = dataVenda;
     (document.getElementById('vl-valor') as HTMLInputElement).value = String(valor);
+    (document.getElementById('vl-atend') as HTMLInputElement).value = atend != null ? String(atend) : '';
     document.getElementById('modal-loja')!.style.display = 'flex';
   };
   (window as any).deleteLoja = async (id: string) => {
     if (!confirm('Excluir este lançamento?')) return;
     const { error } = await supabase.from('vendas_loja').delete().eq('id', id);
     if (error) { alert('Erro ao excluir: ' + error.message); return; }
-    loadVendasLoja();
+    loadVendasLoja(); loadProgressao();
   };
   document.getElementById('btn-novo-loja')?.addEventListener('click', () => {
     editingLojaId = null;
     document.getElementById('modal-loja-title')!.textContent = 'Lançar Vendas da Loja';
+    const today = new Date().toISOString().slice(0, 10);
+    (document.getElementById('vl-data') as HTMLInputElement).value = today;
     (document.getElementById('vl-valor') as HTMLInputElement).value = '';
+    (document.getElementById('vl-atend') as HTMLInputElement).value = '';
     document.getElementById('modal-loja')!.style.display = 'flex';
   });
   document.getElementById('btn-save-loja')?.addEventListener('click', async () => {
     const { mes, ano } = getMesAno();
+    const data_venda = (document.getElementById('vl-data') as HTMLInputElement).value || null;
     const valor_total = parseFloat((document.getElementById('vl-valor') as HTMLInputElement).value);
+    const atendRaw = (document.getElementById('vl-atend') as HTMLInputElement).value.trim();
+    const num_atendimentos = atendRaw !== '' ? parseInt(atendRaw) : null;
     const errorDiv = document.getElementById('vl-error')!;
     if (isNaN(valor_total)) { errorDiv.textContent = 'Informe o valor.'; errorDiv.style.display = 'block'; return; }
     errorDiv.style.display = 'none';
 
     const { error } = editingLojaId
-      ? await supabase.from('vendas_loja').update({ valor_total }).eq('id', editingLojaId)
-      : await supabase.from('vendas_loja').insert({ mes, ano, valor_total });
+      ? await supabase.from('vendas_loja').update({ valor_total, data_venda, num_atendimentos }).eq('id', editingLojaId)
+      : await supabase.from('vendas_loja').insert({ mes, ano, valor_total, data_venda, num_atendimentos });
 
     if (error) {
       errorDiv.textContent = 'Erro ao salvar: ' + error.message;
       errorDiv.style.display = 'block';
       return;
     }
-    (window as any).closeModalLoja(); loadVendasLoja();
+    (window as any).closeModalLoja(); loadVendasLoja(); loadProgressao();
   });
 
   selMes.addEventListener('change', load);
@@ -414,4 +636,3 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   loadFuncionarios(); load();
 </script>
-

@@ -1,0 +1,228 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Escalas" active="escalas">
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:var(--sp-4)">
+    <button class="btn btn-primary" id="btn-nova">+ Nova Escala</button>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📋 Escalas de Trabalho</span>
+    </div>
+    <div class="card-body" id="lista-body">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Nova Escala</span>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Nome *</label>
+          <input class="form-control" type="text" id="esc-nome" placeholder="ex: 6x1, Plantão, 5x2..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição</label>
+          <textarea class="form-control" id="esc-desc" rows="2" placeholder="Opcional — detalhes da escala"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dias da Semana</label>
+          <div class="dias-check-grid">
+            <label class="dia-check-label"><input type="checkbox" class="dia-cb" value="1"> Seg</label>
+            <label class="dia-check-label"><input type="checkbox" class="dia-cb" value="2"> Ter</label>
+            <label class="dia-check-label"><input type="checkbox" class="dia-cb" value="3"> Qua</label>
+            <label class="dia-check-label"><input type="checkbox" class="dia-cb" value="4"> Qui</label>
+            <label class="dia-check-label"><input type="checkbox" class="dia-cb" value="5"> Sex</label>
+            <label class="dia-check-label"><input type="checkbox" class="dia-cb" value="6"> Sáb</label>
+            <label class="dia-check-label"><input type="checkbox" class="dia-cb" value="0"> Dom</label>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="dia-check-label" style="gap:var(--sp-3)">
+            <input type="checkbox" id="esc-ativo" checked />
+            <span>Escala ativa (visível no dashboard)</span>
+          </label>
+        </div>
+        <div id="esc-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-4);margin-bottom:0"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+</AdminLayout>
+
+<style>
+  .dias-check-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--sp-2);
+  }
+  .dia-check-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: .8rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .dia-check-label input[type="checkbox"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+  @media (max-width: 500px) {
+    .dias-check-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  let editingId: string | null = null;
+
+  const DIAS_NOME = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const ORDEM_DISPLAY = [1,2,3,4,5,6,0]; // Seg primeiro
+
+  function renderDias(dias: number[]) {
+    const set = new Set(dias);
+    return ORDEM_DISPLAY.map(d =>
+      `<span class="dia-tag ${set.has(d) ? 'ativo' : 'inativo'}">${DIAS_NOME[d]}</span>`
+    ).join('');
+  }
+
+  async function loadLista() {
+    const body = document.getElementById('lista-body')!;
+    const { data, error } = await supabase
+      .from('escalas')
+      .select('*')
+      .order('ativo', { ascending: false })
+      .order('nome');
+
+    if (error) {
+      body.innerHTML = `<div class="alert alert-danger">Erro ao carregar: ${error.message}</div>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>Nenhuma escala cadastrada ainda</div>';
+      return;
+    }
+
+    body.innerHTML = `<div class="table-wrap"><table class="table-cards">
+      <thead><tr><th>Nome</th><th>Dias</th><th>Status</th><th>Ações</th></tr></thead>
+      <tbody>
+        ${data.map((e: any) => `
+          <tr>
+            <td data-label="Nome">
+              <strong>${escapeHtml(e.nome)}</strong>
+              ${e.descricao ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">${escapeHtml(e.descricao)}</div>` : ''}
+            </td>
+            <td data-label="Dias"><div class="dia-tags">${renderDias(e.dias_semana ?? [])}</div></td>
+            <td data-label="Status">
+              <span class="badge ${e.ativo ? 'badge-success' : 'badge-neutral'}">${e.ativo ? 'Ativa' : 'Inativa'}</span>
+            </td>
+            <td data-label="Ações" class="cell-actions">
+              <button class="btn btn-ghost btn-sm btn-icon" onclick="openEdit('${e.id}')" aria-label="Editar">✏️</button>
+              <button class="btn btn-danger btn-sm btn-icon" onclick="deleteEscala('${e.id}')" aria-label="Excluir">🗑️</button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  }
+
+  function escapeHtml(s: string) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
+  }
+
+  (window as any).closeModal = () => {
+    document.getElementById('modal')!.style.display = 'none';
+    document.getElementById('esc-error')!.style.display = 'none';
+    editingId = null;
+  };
+
+  function openModal(escala?: any) {
+    const title = document.getElementById('modal-title')!;
+    const nomeEl = document.getElementById('esc-nome') as HTMLInputElement;
+    const descEl = document.getElementById('esc-desc') as HTMLTextAreaElement;
+    const ativoEl = document.getElementById('esc-ativo') as HTMLInputElement;
+    const cbs = document.querySelectorAll<HTMLInputElement>('.dia-cb');
+
+    if (escala) {
+      editingId = escala.id;
+      title.textContent = 'Editar Escala';
+      nomeEl.value = escala.nome ?? '';
+      descEl.value = escala.descricao ?? '';
+      ativoEl.checked = escala.ativo ?? true;
+      const diasSet = new Set<number>(escala.dias_semana ?? []);
+      cbs.forEach(cb => { cb.checked = diasSet.has(parseInt(cb.value)); });
+    } else {
+      editingId = null;
+      title.textContent = 'Nova Escala';
+      nomeEl.value = '';
+      descEl.value = '';
+      ativoEl.checked = true;
+      cbs.forEach(cb => { cb.checked = false; });
+    }
+    document.getElementById('esc-error')!.style.display = 'none';
+    document.getElementById('modal')!.style.display = 'flex';
+    nomeEl.focus();
+  }
+
+  (window as any).openEdit = async (id: string) => {
+    const { data, error } = await supabase.from('escalas').select('*').eq('id', id).single();
+    if (error || !data) { alert('Erro ao carregar escala.'); return; }
+    openModal(data);
+  };
+
+  (window as any).deleteEscala = async (id: string) => {
+    if (!confirm('Excluir esta escala?')) return;
+    const { error } = await supabase.from('escalas').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    loadLista();
+  };
+
+  document.getElementById('btn-nova')?.addEventListener('click', () => openModal());
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const nome = (document.getElementById('esc-nome') as HTMLInputElement).value.trim();
+    const descricao = (document.getElementById('esc-desc') as HTMLTextAreaElement).value.trim() || null;
+    const ativo = (document.getElementById('esc-ativo') as HTMLInputElement).checked;
+    const dias_semana = Array.from(document.querySelectorAll<HTMLInputElement>('.dia-cb:checked'))
+      .map(cb => parseInt(cb.value));
+    const errorDiv = document.getElementById('esc-error')!;
+
+    if (!nome) {
+      errorDiv.textContent = 'Informe o nome da escala.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    errorDiv.style.display = 'none';
+
+    const payload = { nome, descricao, dias_semana, ativo };
+    const { error } = editingId
+      ? await supabase.from('escalas').update(payload).eq('id', editingId)
+      : await supabase.from('escalas').insert(payload);
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
+    }
+    (window as any).closeModal();
+    loadLista();
+  });
+
+  loadLista();
+</script>

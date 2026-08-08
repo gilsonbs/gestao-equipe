@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS vendas_funcionario (
   mes integer NOT NULL CHECK (mes BETWEEN 1 AND 12),
   ano integer NOT NULL CHECK (ano >= 2020),
   valor numeric(12,2) NOT NULL DEFAULT 0,
+  num_atendimentos integer,
   created_at timestamptz DEFAULT now(),
   UNIQUE(funcionario_id, mes, ano)
 );
@@ -57,6 +58,8 @@ CREATE TABLE IF NOT EXISTS vendas_loja (
   mes integer NOT NULL CHECK (mes BETWEEN 1 AND 12),
   ano integer NOT NULL CHECK (ano >= 2020),
   valor_total numeric(12,2) NOT NULL DEFAULT 0,
+  num_atendimentos integer,
+  data_venda date,
   created_at timestamptz DEFAULT now()
 );
 
@@ -84,6 +87,16 @@ CREATE TABLE IF NOT EXISTS produtos_top (
   quantidade integer,
   mes integer CHECK (mes BETWEEN 1 AND 12),
   ano integer CHECK (ano >= 2020),
+  created_at timestamptz DEFAULT now()
+);
+
+-- Escalas de trabalho praticadas na loja
+CREATE TABLE IF NOT EXISTS escalas (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  nome text NOT NULL,
+  descricao text,
+  dias_semana integer[] NOT NULL DEFAULT '{}',
+  ativo boolean NOT NULL DEFAULT true,
   created_at timestamptz DEFAULT now()
 );
 
@@ -118,6 +131,12 @@ SELECT
   COALESCE(m.ano, v.ano)                            AS ano,
   COALESCE(m.valor_meta, 0)::numeric(12,2)          AS valor_meta,
   COALESCE(v.valor, 0)::numeric(12,2)               AS valor_realizado,
+  v.num_atendimentos,
+  CASE
+    WHEN COALESCE(v.num_atendimentos, 0) > 0
+      THEN ROUND(COALESCE(v.valor, 0) / v.num_atendimentos, 2)::numeric(12,2)
+    ELSE NULL
+  END                                               AS ticket_medio,
   CASE
     WHEN COALESCE(m.valor_meta, 0) > 0
       THEN ROUND((COALESCE(v.valor, 0) / m.valor_meta) * 100)
@@ -142,7 +161,9 @@ GRANT SELECT ON desempenho_mensal TO anon, authenticated;
 CREATE OR REPLACE VIEW desempenho_loja
 WITH (security_invoker = on) AS
 WITH vendas AS (
-  SELECT mes, ano, SUM(valor_total)::numeric(12,2) AS total
+  SELECT mes, ano,
+    SUM(valor_total)::numeric(12,2)  AS total,
+    SUM(num_atendimentos)            AS total_atendimentos
   FROM vendas_loja
   GROUP BY mes, ano
 )
@@ -151,6 +172,12 @@ SELECT
   COALESCE(m.ano, v.ano)                   AS ano,
   COALESCE(m.valor_meta, 0)::numeric(12,2) AS valor_meta,
   COALESCE(v.total, 0)::numeric(12,2)      AS valor_realizado,
+  v.total_atendimentos,
+  CASE
+    WHEN COALESCE(v.total_atendimentos, 0) > 0
+      THEN ROUND(COALESCE(v.total, 0) / v.total_atendimentos, 2)::numeric(12,2)
+    ELSE NULL
+  END                                      AS ticket_medio,
   CASE
     WHEN COALESCE(m.valor_meta, 0) > 0
       THEN ROUND((COALESCE(v.total, 0) / m.valor_meta) * 100)
@@ -179,6 +206,7 @@ GRANT SELECT ON avisos_com_status TO anon, authenticated;
 -- Row Level Security (RLS)
 -- =============================================
 
+ALTER TABLE escalas             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE funcionarios        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metas               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vendas_funcionario  ENABLE ROW LEVEL SECURITY;
@@ -189,6 +217,7 @@ ALTER TABLE produtos_top        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE avisos              ENABLE ROW LEVEL SECURITY;
 
 -- Leitura pública (dashboard sem login)
+CREATE POLICY "Leitura pública - escalas"            ON escalas            FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - funcionarios"       ON funcionarios       FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - metas"              ON metas              FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - vendas_funcionario" ON vendas_funcionario FOR SELECT USING (true);
@@ -201,6 +230,9 @@ CREATE POLICY "Leitura pública - avisos"             ON avisos             FOR 
 -- Escrita apenas para usuários autenticados (admin).
 -- O (select ...) faz o Postgres avaliar a função uma vez por query
 -- em vez de uma vez por linha.
+CREATE POLICY "Admin - escalas" ON escalas
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
 CREATE POLICY "Admin - funcionarios" ON funcionarios
   FOR ALL USING ((select auth.role()) = 'authenticated')
   WITH CHECK ((select auth.role()) = 'authenticated');
@@ -229,6 +261,7 @@ CREATE POLICY "Admin - avisos" ON avisos
 -- =============================================
 -- Índices para melhorar performance
 -- =============================================
+CREATE INDEX IF NOT EXISTS idx_escalas_ativo              ON escalas(ativo);
 CREATE INDEX IF NOT EXISTS idx_metas_mes_ano              ON metas(mes, ano);
 CREATE INDEX IF NOT EXISTS idx_vendas_funcionario_mes_ano ON vendas_funcionario(mes, ano);
 CREATE INDEX IF NOT EXISTS idx_metas_loja_mes_ano         ON metas_loja(mes, ano);
