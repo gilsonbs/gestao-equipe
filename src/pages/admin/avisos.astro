@@ -44,8 +44,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <input class="form-control" id="titulo" required placeholder="Ex: Escala de fim de ano" maxlength="120" />
         </div>
         <div class="form-group">
-          <label class="form-label" for="mensagem">Mensagem *</label>
-          <textarea class="form-control" id="mensagem" required placeholder="Escreva o aviso para a equipe..."></textarea>
+          <label class="form-label" for="mensagem">Mensagem *
+            <span style="font-weight:400;font-size:.75rem;color:var(--text-muted);margin-left:.5rem">suporta **negrito**, *itálico*, listas com - e pular linha</span>
+          </label>
+          <textarea class="form-control" id="mensagem" required placeholder="Escreva o aviso para a equipe..." rows="5" style="font-family:monospace;font-size:.875rem"></textarea>
+          <div id="md-preview" style="display:none;margin-top:var(--sp-2);padding:var(--sp-3);background:var(--slate-50);border-radius:var(--radius);border:1px solid var(--border);font-size:.875rem" class="aviso-md"></div>
         </div>
         <div class="form-group">
           <label class="form-label" for="tipo">Tipo</label>
@@ -82,6 +85,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 <script>
   import { supabase } from '../../lib/supabase';
   import { formatarData } from '../../lib/dates';
+  import { renderMd } from '../../lib/markdown';
 
   let editingId: string | null = null;
   let filtro = '';
@@ -151,6 +155,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     (document.getElementById('tipo') as HTMLSelectElement).value = 'info';
     (document.getElementById('data_expiracao') as HTMLInputElement).value = '';
     (document.getElementById('fixado') as HTMLInputElement).checked = false;
+    previewEl.style.display = 'none';
+    previewEl.innerHTML = '';
     editingId = null;
   }
 
@@ -159,6 +165,19 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     el.textContent = msg;
     el.style.display = 'block';
   }
+
+  // Preview em tempo real
+  const mensagemEl = document.getElementById('mensagem') as HTMLTextAreaElement;
+  const previewEl = document.getElementById('md-preview') as HTMLDivElement;
+  mensagemEl.addEventListener('input', () => {
+    const txt = mensagemEl.value.trim();
+    if (txt) {
+      previewEl.innerHTML = renderMd(txt);
+      previewEl.style.display = 'block';
+    } else {
+      previewEl.style.display = 'none';
+    }
+  });
 
   document.getElementById('btn-novo')?.addEventListener('click', () => {
     closeModal();
@@ -180,6 +199,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     (document.getElementById('tipo') as HTMLSelectElement).value = data.tipo;
     (document.getElementById('data_expiracao') as HTMLInputElement).value = data.data_expiracao ?? '';
     (document.getElementById('fixado') as HTMLInputElement).checked = data.fixado;
+    const txt = data.mensagem?.trim();
+    if (txt) { previewEl.innerHTML = renderMd(txt); previewEl.style.display = 'block'; }
     openModal();
   };
 

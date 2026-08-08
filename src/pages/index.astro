@@ -186,6 +186,7 @@ const anoAtual = now.getFullYear();
 <script>
   import { supabase } from '../lib/supabase';
   import { intervaloDoMes, formatarData } from '../lib/dates';
+  import { renderMd } from '../lib/markdown';
 
   const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const MESES_SHORT = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -807,7 +808,7 @@ const anoAtual = now.getFullYear();
             <h3 class="aviso-titulo">${a.fixado ? '<span class="aviso-pin" title="Fixado">📌</span>' : ''}${escapeHtml(a.titulo)}</h3>
             <span class="aviso-tipo">${t.rotulo}</span>
           </div>
-          <p class="aviso-msg">${escapeHtml(a.mensagem)}</p>
+          <div class="aviso-msg aviso-md">${renderMd(a.mensagem)}</div>
           <div class="aviso-rodape">
             <span>${formatarData(String(a.created_at).slice(0, 10))}</span>
             ${a.data_expiracao ? `<span>· vale até ${formatarData(a.data_expiracao)}</span>` : ''}
@@ -829,7 +830,7 @@ const anoAtual = now.getFullYear();
               <span class="hist-item-titulo">${escapeHtml(a.titulo)}</span>
               <span class="badge badge-neutral">${t.rotulo}</span>
             </div>
-            <p class="hist-item-msg">${escapeHtml(a.mensagem)}</p>
+            <div class="hist-item-msg aviso-md">${renderMd(a.mensagem)}</div>
             <div class="hist-item-data">
               Publicado em ${formatarData(String(a.created_at).slice(0, 10))}
               ${a.data_expiracao ? ` · encerrado em ${formatarData(a.data_expiracao)}` : ''}
