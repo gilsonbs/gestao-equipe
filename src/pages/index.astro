@@ -1148,6 +1148,11 @@ const anoAtual = now.getFullYear();
     /* Seções sem dados ficam ocultas */
     [hidden] { display: none !important; }
 
+    /* Seções omitidas na impressão */
+    .card:has(#vendas-body) { display: none !important; }
+    .cal-lista { display: none !important; }
+    section:has(#produtos-body) { display: none !important; }
+
     /* Não quebra progresso de metas no meio */
     .ritmo-kpis { grid-template-columns: repeat(3, 1fr) !important; }
   }
