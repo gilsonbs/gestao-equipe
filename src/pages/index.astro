@@ -25,7 +25,10 @@ const anoAtual = now.getFullYear();
         <div class="brand-sub">Painel da equipe</div>
       </div>
     </div>
-    <a href={`${base}admin/`} class="btn btn-sm admin-link">⚙️ <span>Admin</span></a>
+    <div style="display:flex;gap:var(--sp-2);align-items:center">
+      <button class="btn btn-sm export-btn" id="btn-export-pdf" title="Exportar dashboard como PDF">📄 <span>PDF</span></button>
+      <a href={`${base}admin/`} class="btn btn-sm admin-link">⚙️ <span>Admin</span></a>
+    </div>
   </div>
   <div class="top-bar-period">
     <label class="period-label" for="sel-mes">Período</label>
@@ -40,6 +43,14 @@ const anoAtual = now.getFullYear();
     </div>
   </div>
 </header>
+
+<!-- Cabeçalho apenas visível na impressão/PDF -->
+<div class="print-header" id="print-header">
+  <div>
+    <div class="print-header-title">💊 Gestão de Equipe — Dashboard</div>
+  </div>
+  <div id="print-periodo-label" class="print-header-periodo"></div>
+</div>
 
 <main class="dashboard">
 
@@ -962,6 +973,14 @@ const anoAtual = now.getFullYear();
   selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadEntregas(); });
 
   loadAll();
+
+  // ===== EXPORTAR PDF =====
+  window.addEventListener('beforeprint', () => {
+    const mes = getMes(); const ano = getAno();
+    const el = document.getElementById('print-periodo-label');
+    if (el) el.textContent = `${MESES[mes]} / ${ano} · emitido em ${new Date().toLocaleDateString('pt-BR')}`;
+  });
+  document.getElementById('btn-export-pdf')?.addEventListener('click', () => window.print());
 </script>
 
 <style>
@@ -1058,6 +1077,18 @@ const anoAtual = now.getFullYear();
   .prod-filtros #busca-prod { width: 15rem; }
   .prod-filtros #prod-mes { width: auto; }
 
+  /* ---------- Botão PDF ---------- */
+  .export-btn {
+    background: rgba(255,255,255,.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.15);
+    flex-shrink: 0;
+  }
+  .export-btn:hover { background: rgba(255,255,255,.18); color: #fff; }
+
+  /* ---------- Cabeçalho de impressão ---------- */
+  .print-header { display: none; }
+
   /* ---------- Entregas ---------- */
   .entregas-wrap { display: flex; gap: var(--sp-5); align-items: center; }
   .entregas-stat { min-width: 9rem; flex-shrink: 0; }
@@ -1069,12 +1100,56 @@ const anoAtual = now.getFullYear();
   @media (max-width: 640px) {
     .brand-sub { display: none; }
     .admin-link span { display: none; }
+    .export-btn span { display: none; }
     .prod-filtros { width: 100%; }
     .prod-filtros #busca-prod,
     .prod-filtros #prod-mes { width: 100%; }
     .aviso { padding: var(--sp-3); }
     .entregas-wrap { flex-direction: column; }
     .entregas-stat { text-align: center; }
+  }
+
+  /* ========== IMPRESSÃO / EXPORT PDF ========== */
+  @media print {
+    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+
+    /* Força cores na impressão */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+    /* Esconde o chrome da interface */
+    .top-bar { display: none !important; }
+    #btn-export-pdf { display: none !important; }
+    .filter-tipo, .prod-filtros, #hist-details { display: none !important; }
+    .cell-actions { display: none !important; }
+
+    /* Mostra o cabeçalho de impressão */
+    .print-header {
+      display: flex !important;
+      justify-content: space-between;
+      align-items: baseline;
+      padding-bottom: .6rem;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid var(--accent);
+      gap: var(--sp-4);
+    }
+    .print-header-title { font-size: 1rem; font-weight: 700; }
+    .print-header-periodo { font-size: .8rem; color: var(--text-muted); }
+
+    /* Layout de impressão */
+    body { background: white !important; }
+    .dashboard { padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+    .grid-2 { grid-template-columns: 1fr !important; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
+    .section { margin-bottom: .9rem !important; break-inside: avoid; page-break-inside: avoid; }
+
+    /* Cards mais limpos */
+    .card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; break-inside: avoid; }
+
+    /* Seções sem dados ficam ocultas */
+    [hidden] { display: none !important; }
+
+    /* Não quebra progresso de metas no meio */
+    .ritmo-kpis { grid-template-columns: repeat(3, 1fr) !important; }
   }
 </style>
 </body>
