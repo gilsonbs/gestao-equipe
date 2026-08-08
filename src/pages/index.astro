@@ -764,7 +764,7 @@ const anoAtual = now.getFullYear();
       return `<div class="escala-card">
         <div class="escala-info">
           <div class="escala-nome">${escapeHtml(e.nome)}</div>
-          ${e.descricao ? `<div class="escala-desc">${escapeHtml(e.descricao)}</div>` : ''}
+          ${e.descricao ? `<div class="escala-desc aviso-md">${renderMd(e.descricao)}</div>` : ''}
           <div class="dia-tags">${diasHtml}</div>
         </div>
       </div>`;
