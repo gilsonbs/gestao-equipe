@@ -25,7 +25,10 @@ const anoAtual = now.getFullYear();
         <div class="brand-sub">Painel da equipe</div>
       </div>
     </div>
-    <a href={`${base}admin/`} class="btn btn-sm admin-link">⚙️ <span>Admin</span></a>
+    <div style="display:flex;gap:var(--sp-2);align-items:center">
+      <button class="btn btn-sm export-btn" id="btn-export-pdf" title="Exportar dashboard como PDF">📄 <span>PDF</span></button>
+      <a href={`${base}admin/`} class="btn btn-sm admin-link">⚙️ <span>Admin</span></a>
+    </div>
   </div>
   <div class="top-bar-period">
     <label class="period-label" for="sel-mes">Período</label>
@@ -40,6 +43,14 @@ const anoAtual = now.getFullYear();
     </div>
   </div>
 </header>
+
+<!-- Cabeçalho apenas visível na impressão/PDF -->
+<div class="print-header" id="print-header">
+  <div>
+    <div class="print-header-title">💊 Gestão de Equipe — Dashboard</div>
+  </div>
+  <div id="print-periodo-label" class="print-header-periodo"></div>
+</div>
 
 <main class="dashboard">
 
@@ -82,6 +93,14 @@ const anoAtual = now.getFullYear();
       <span id="ritmo-status" class="badge"></span>
     </div>
     <div class="card-body" id="ritmo-body"></div>
+  </section>
+
+  <!-- Entregas por Mês -->
+  <section id="entregas-section" class="card section" hidden>
+    <div class="card-header">
+      <span class="card-title">📦 Entregas por Mês</span>
+    </div>
+    <div class="card-body" id="entregas-body"></div>
   </section>
 
   <div class="grid-2 section">
@@ -320,6 +339,103 @@ const anoAtual = now.getFullYear();
             <div class="ritmo-kpi-sub">${k.sub}</div>
           </div>`;
         }).join('')}
+      </div>`;
+  }
+
+  // ===== ENTREGAS =====
+  function getUltimosMeses(mes: number, ano: number, n: number = 6) {
+    const lista: { mes: number; ano: number }[] = [];
+    for (let i = n - 1; i >= 0; i--) {
+      let m = mes - i;
+      let a = ano;
+      while (m <= 0) { m += 12; a--; }
+      lista.push({ mes: m, ano: a });
+    }
+    return lista;
+  }
+
+  function gerarGraficoEntregas(dados: { mes: number; ano: number; quantidade: number }[], mesSel: number, anoSel: number) {
+    const W = 400, H = 140;
+    const pad = { t: 24, r: 12, b: 26, l: 12 };
+    const aw = W - pad.l - pad.r;
+    const ah = H - pad.t - pad.b;
+    const n = dados.length;
+    if (n === 0) return '';
+
+    const maxVal = Math.max(...dados.map(d => d.quantidade), 1);
+    const gap = 8;
+    const barW = Math.floor((aw - (n - 1) * gap) / n);
+
+    const bars = dados.map((d, i) => {
+      const x = pad.l + i * (barW + gap);
+      const isSel = d.mes === mesSel && d.ano === anoSel;
+      const barH = d.quantidade > 0
+        ? Math.max(Math.round((d.quantidade / maxVal) * ah), 4)
+        : 2;
+      const y = pad.t + ah - barH;
+      const fill = isSel ? 'var(--accent)' : (d.quantidade > 0 ? 'var(--slate-200)' : 'var(--slate-100)');
+      const textFill = isSel ? 'var(--accent)' : 'var(--text-muted)';
+      const fw = isSel ? '700' : '400';
+      const label = MESES_SHORT[d.mes];
+      return [
+        `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="3" fill="${fill}"/>`,
+        d.quantidade > 0 ? `<text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" font-size="10" fill="${textFill}" font-weight="${fw}">${d.quantidade}</text>` : '',
+        `<text x="${x + barW / 2}" y="${H - 6}" text-anchor="middle" font-size="9" fill="${textFill}" font-weight="${fw}">${label}</text>`,
+      ].join('');
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${bars}</svg>`;
+  }
+
+  async function loadEntregas() {
+    const mes = getMes(); const ano = getAno();
+    const section = document.getElementById('entregas-section') as HTMLElement;
+    const body = document.getElementById('entregas-body')!;
+
+    const periodos = getUltimosMeses(mes, ano, 6);
+
+    const { data, error } = await supabase
+      .from('entregas')
+      .select('mes, ano, quantidade')
+      .order('ano').order('mes');
+
+    if (error) { section.hidden = true; return; }
+
+    const dataMap = new Map<string, number>();
+    (data ?? []).forEach((d: any) => dataMap.set(`${d.ano}-${d.mes}`, Number(d.quantidade)));
+
+    const dados = periodos.map(p => ({
+      mes: p.mes,
+      ano: p.ano,
+      quantidade: dataMap.get(`${p.ano}-${p.mes}`) ?? 0,
+    }));
+
+    if (dados.every(d => d.quantidade === 0)) { section.hidden = true; return; }
+    section.hidden = false;
+
+    const idx = dados.length - 1;
+    const qtdAtual = dados[idx].quantidade;
+    const prev = idx >= 1 ? dados[idx - 1] : null;
+    const qtdPrev = prev?.quantidade ?? 0;
+
+    const delta = prev !== null && qtdPrev > 0
+      ? Math.round(((qtdAtual - qtdPrev) / qtdPrev) * 100)
+      : null;
+
+    const deltaHtml = delta !== null
+      ? `<div class="entregas-delta" style="color:${delta >= 0 ? 'var(--success)' : 'var(--danger)'}">
+           ${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% vs ${MESES_SHORT[prev!.mes]}
+         </div>`
+      : '';
+
+    body.innerHTML = `
+      <div class="entregas-wrap">
+        <div class="entregas-stat">
+          <div class="entregas-num">${qtdAtual.toLocaleString('pt-BR')}</div>
+          <div class="entregas-label">em ${MESES_SHORT[mes]}/${ano}</div>
+          ${deltaHtml}
+        </div>
+        <div class="entregas-chart">${gerarGraficoEntregas(dados, mes, ano)}</div>
       </div>`;
   }
 
@@ -848,17 +964,23 @@ const anoAtual = now.getFullYear();
 
   // ===== LOAD ALL =====
   function loadAll() {
-    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos(); loadEscalas();
+    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos(); loadEscalas(); loadEntregas();
   }
 
-  // Aniversários dependem só do mês, mas precisam recarregar junto:
-  // sem isso o card ficava preso no mês em que a página abriu.
   selMes.addEventListener('change', () => {
-    loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadAniversarios();
+    loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadAniversarios(); loadEntregas();
   });
-  selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); });
+  selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadEntregas(); });
 
   loadAll();
+
+  // ===== EXPORTAR PDF =====
+  window.addEventListener('beforeprint', () => {
+    const mes = getMes(); const ano = getAno();
+    const el = document.getElementById('print-periodo-label');
+    if (el) el.textContent = `${MESES[mes]} / ${ano} · emitido em ${new Date().toLocaleDateString('pt-BR')}`;
+  });
+  document.getElementById('btn-export-pdf')?.addEventListener('click', () => window.print());
 </script>
 
 <style>
@@ -955,13 +1077,79 @@ const anoAtual = now.getFullYear();
   .prod-filtros #busca-prod { width: 15rem; }
   .prod-filtros #prod-mes { width: auto; }
 
+  /* ---------- Botão PDF ---------- */
+  .export-btn {
+    background: rgba(255,255,255,.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.15);
+    flex-shrink: 0;
+  }
+  .export-btn:hover { background: rgba(255,255,255,.18); color: #fff; }
+
+  /* ---------- Cabeçalho de impressão ---------- */
+  .print-header { display: none; }
+
+  /* ---------- Entregas ---------- */
+  .entregas-wrap { display: flex; gap: var(--sp-5); align-items: center; }
+  .entregas-stat { min-width: 9rem; flex-shrink: 0; }
+  .entregas-num { font-size: 2.25rem; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; color: var(--accent); }
+  .entregas-label { font-size: .8rem; color: var(--text-muted); margin-top: 3px; }
+  .entregas-delta { font-size: .8rem; font-weight: 600; margin-top: 6px; }
+  .entregas-chart { flex: 1; min-width: 0; }
+
   @media (max-width: 640px) {
     .brand-sub { display: none; }
     .admin-link span { display: none; }
+    .export-btn span { display: none; }
     .prod-filtros { width: 100%; }
     .prod-filtros #busca-prod,
     .prod-filtros #prod-mes { width: 100%; }
     .aviso { padding: var(--sp-3); }
+    .entregas-wrap { flex-direction: column; }
+    .entregas-stat { text-align: center; }
+  }
+
+  /* ========== IMPRESSÃO / EXPORT PDF ========== */
+  @media print {
+    @page { size: A4 portrait; margin: 1.5cm 1.2cm; }
+
+    /* Força cores na impressão */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+    /* Esconde o chrome da interface */
+    .top-bar { display: none !important; }
+    #btn-export-pdf { display: none !important; }
+    .filter-tipo, .prod-filtros, #hist-details { display: none !important; }
+    .cell-actions { display: none !important; }
+
+    /* Mostra o cabeçalho de impressão */
+    .print-header {
+      display: flex !important;
+      justify-content: space-between;
+      align-items: baseline;
+      padding-bottom: .6rem;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid var(--accent);
+      gap: var(--sp-4);
+    }
+    .print-header-title { font-size: 1rem; font-weight: 700; }
+    .print-header-periodo { font-size: .8rem; color: var(--text-muted); }
+
+    /* Layout de impressão */
+    body { background: white !important; }
+    .dashboard { padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+    .grid-2 { grid-template-columns: 1fr !important; }
+    .grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
+    .section { margin-bottom: .9rem !important; break-inside: avoid; page-break-inside: avoid; }
+
+    /* Cards mais limpos */
+    .card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; break-inside: avoid; }
+
+    /* Seções sem dados ficam ocultas */
+    [hidden] { display: none !important; }
+
+    /* Não quebra progresso de metas no meio */
+    .ritmo-kpis { grid-template-columns: repeat(3, 1fr) !important; }
   }
 </style>
 </body>

@@ -1,0 +1,182 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+const MESES_LIST = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const now = new Date();
+const mesAtual = now.getMonth() + 1;
+const anoAtual = now.getFullYear();
+---
+<AdminLayout title="Entregas" active="entregas">
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:var(--sp-4)">
+    <button class="btn btn-primary" id="btn-novo">+ Nova Entrada</button>
+  </div>
+
+  <div class="card">
+    <div class="card-body" style="padding:0">
+      <div class="table-wrap">
+        <table class="table-cards">
+          <thead>
+            <tr>
+              <th>Período</th>
+              <th>Quantidade</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="3"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Nova Entrada</span>
+        <button class="modal-close" id="modal-close" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="ent-mes">Mês *</label>
+          <select class="form-control" id="ent-mes">
+            {MESES_LIST.map((m, i) => (
+              <option value={i + 1} selected={i + 1 === mesAtual}>{m}</option>
+            ))}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ent-ano">Ano *</label>
+          <input class="form-control" type="number" id="ent-ano" min="2020" max="2100" value={anoAtual} />
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="ent-qtd">Quantidade de Entregas *</label>
+          <input class="form-control" type="number" id="ent-qtd" min="0" placeholder="0" />
+        </div>
+        <div id="ent-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-4);margin-bottom:0"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  let editingId: string | null = null;
+
+  function escapeHtml(s: string) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
+  }
+
+  async function load() {
+    const { data, error } = await supabase
+      .from('entregas')
+      .select('*')
+      .order('ano', { ascending: false })
+      .order('mes', { ascending: false });
+
+    const tbody = document.getElementById('tbody')!;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="3"><div class="alert alert-danger" style="margin:var(--sp-4)">Erro ao carregar: ${escapeHtml(error.message)}</div></td></tr>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3"><div class="empty"><div class="empty-icon">📦</div>Nenhuma entrada registrada ainda</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map((e: any) => `
+      <tr>
+        <td data-label="Período"><strong>${MESES[e.mes]} ${e.ano}</strong></td>
+        <td data-label="Quantidade"><strong>${Number(e.quantidade).toLocaleString('pt-BR')}</strong> entregas</td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="editEntrega('${e.id}')" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteEntrega('${e.id}')" aria-label="Excluir">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function openModal(entrega?: any) {
+    const mesEl = document.getElementById('ent-mes') as HTMLSelectElement;
+    const anoEl = document.getElementById('ent-ano') as HTMLInputElement;
+    const qtdEl = document.getElementById('ent-qtd') as HTMLInputElement;
+
+    if (entrega) {
+      editingId = entrega.id;
+      document.getElementById('modal-title')!.textContent = 'Editar Entrada';
+      mesEl.value = String(entrega.mes);
+      anoEl.value = String(entrega.ano);
+      qtdEl.value = String(entrega.quantidade);
+    } else {
+      editingId = null;
+      document.getElementById('modal-title')!.textContent = 'Nova Entrada';
+      const now = new Date();
+      mesEl.value = String(now.getMonth() + 1);
+      anoEl.value = String(now.getFullYear());
+      qtdEl.value = '';
+    }
+    document.getElementById('ent-error')!.style.display = 'none';
+    document.getElementById('modal')!.style.display = 'flex';
+    qtdEl.focus();
+  }
+
+  function closeModal() {
+    document.getElementById('modal')!.style.display = 'none';
+    editingId = null;
+  }
+
+  (window as any).editEntrega = async (id: string) => {
+    const { data, error } = await supabase.from('entregas').select('*').eq('id', id).single();
+    if (error || !data) { alert('Erro ao carregar.'); return; }
+    openModal(data);
+  };
+
+  (window as any).deleteEntrega = async (id: string) => {
+    if (!confirm('Excluir este registro?')) return;
+    const { error } = await supabase.from('entregas').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    load();
+  };
+
+  document.getElementById('btn-novo')?.addEventListener('click', () => openModal());
+  document.getElementById('modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const mes = parseInt((document.getElementById('ent-mes') as HTMLSelectElement).value);
+    const ano = parseInt((document.getElementById('ent-ano') as HTMLInputElement).value);
+    const qtdRaw = (document.getElementById('ent-qtd') as HTMLInputElement).value.trim();
+    const quantidade = parseInt(qtdRaw);
+    const errorDiv = document.getElementById('ent-error')!;
+
+    if (!mes || !ano || qtdRaw === '' || isNaN(quantidade) || quantidade < 0) {
+      errorDiv.textContent = 'Preencha todos os campos com valores válidos.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    errorDiv.style.display = 'none';
+
+    const payload = { mes, ano, quantidade };
+    const { error } = editingId
+      ? await supabase.from('entregas').update(payload).eq('id', editingId)
+      : await supabase.from('entregas').insert(payload);
+
+    if (error) {
+      errorDiv.textContent = 'Erro ao salvar: ' + error.message;
+      errorDiv.style.display = 'block';
+      return;
+    }
+    closeModal();
+    load();
+  });
+
+  load();
+</script>
