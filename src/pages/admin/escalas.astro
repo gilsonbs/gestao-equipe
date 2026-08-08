@@ -30,7 +30,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         </div>
         <div class="form-group">
           <label class="form-label">Descrição</label>
-          <textarea class="form-control" id="esc-desc" rows="2" placeholder="Opcional — detalhes da escala"></textarea>
+          <textarea class="form-control" id="esc-desc" rows="2" placeholder="Opcional — detalhes da escala" style="font-family:monospace;font-size:.875rem"></textarea>
+          <div class="md-legend">
+            <span><code>**texto**</code> negrito</span>
+            <span><code>*texto*</code> itálico</span>
+            <span><code>- item</code> lista</span>
+            <span>linha em branco = novo parágrafo</span>
+          </div>
+          <div id="desc-preview" style="display:none;margin-top:var(--sp-2);padding:var(--sp-3);background:var(--slate-50);border-radius:var(--radius);border:1px solid var(--border);font-size:.875rem" class="aviso-md"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Dias da Semana</label>
@@ -89,8 +96,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
 <script>
   import { supabase } from '../../lib/supabase';
+  import { renderMd } from '../../lib/markdown';
 
   let editingId: string | null = null;
+
+  const descEl = document.getElementById('esc-desc') as HTMLTextAreaElement;
+  const descPreview = document.getElementById('desc-preview') as HTMLDivElement;
+  descEl.addEventListener('input', () => {
+    const txt = descEl.value.trim();
+    if (txt) { descPreview.innerHTML = renderMd(txt); descPreview.style.display = 'block'; }
+    else { descPreview.style.display = 'none'; }
+  });
 
   const DIAS_NOME = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   const ORDEM_DISPLAY = [1,2,3,4,5,6,0]; // Seg primeiro
@@ -126,7 +142,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <tr>
             <td data-label="Nome">
               <strong>${escapeHtml(e.nome)}</strong>
-              ${e.descricao ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:2px">${escapeHtml(e.descricao)}</div>` : ''}
+              ${e.descricao ? `<div style="font-size:.75rem;color:var(--text-muted);margin-top:2px" class="aviso-md">${renderMd(e.descricao)}</div>` : ''}
             </td>
             <td data-label="Dias"><div class="dia-tags">${renderDias(e.dias_semana ?? [])}</div></td>
             <td data-label="Status">
@@ -164,6 +180,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       title.textContent = 'Editar Escala';
       nomeEl.value = escala.nome ?? '';
       descEl.value = escala.descricao ?? '';
+      const txt = escala.descricao?.trim();
+      if (txt) { descPreview.innerHTML = renderMd(txt); descPreview.style.display = 'block'; }
+      else { descPreview.style.display = 'none'; }
       ativoEl.checked = escala.ativo ?? true;
       const diasSet = new Set<number>(escala.dias_semana ?? []);
       cbs.forEach(cb => { cb.checked = diasSet.has(parseInt(cb.value)); });
@@ -172,6 +191,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       title.textContent = 'Nova Escala';
       nomeEl.value = '';
       descEl.value = '';
+      descPreview.style.display = 'none';
       ativoEl.checked = true;
       cbs.forEach(cb => { cb.checked = false; });
     }
