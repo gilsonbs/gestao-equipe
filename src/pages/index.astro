@@ -96,14 +96,27 @@ const anoAtual = now.getFullYear();
       </div>
     </div>
 
-    <!-- Aniversários -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">🎂 Aniversários do Mês</span>
-        <span id="aniv-periodo" style="font-size:.8rem;color:var(--text-muted)"></span>
+    <!-- Coluna direita: Escalas + Aniversários -->
+    <div style="display:flex;flex-direction:column;gap:var(--sp-5)">
+      <!-- Escalas de Trabalho -->
+      <div class="card" id="escalas-section" hidden>
+        <div class="card-header">
+          <span class="card-title">📋 Escalas de Trabalho</span>
+        </div>
+        <div class="card-body" id="escalas-body">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
       </div>
-      <div class="card-body" id="aniv-body">
-        <div class="loading"><div class="spinner"></div> Carregando...</div>
+
+      <!-- Aniversários -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🎂 Aniversários do Mês</span>
+          <span id="aniv-periodo" style="font-size:.8rem;color:var(--text-muted)"></span>
+        </div>
+        <div class="card-body" id="aniv-body">
+          <div class="loading"><div class="spinner"></div> Carregando...</div>
+        </div>
       </div>
     </div>
   </div>
@@ -135,16 +148,6 @@ const anoAtual = now.getFullYear();
       </div>
     </div>
   </div>
-
-  <!-- Escalas de Trabalho -->
-  <section class="card section" id="escalas-section" hidden>
-    <div class="card-header">
-      <span class="card-title">📋 Escalas de Trabalho</span>
-    </div>
-    <div class="card-body" id="escalas-body">
-      <div class="loading"><div class="spinner"></div></div>
-    </div>
-  </section>
 
   <!-- Top Produtos -->
   <section class="card section">
