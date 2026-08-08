@@ -90,6 +90,16 @@ CREATE TABLE IF NOT EXISTS produtos_top (
   created_at timestamptz DEFAULT now()
 );
 
+-- Escalas de trabalho praticadas na loja
+CREATE TABLE IF NOT EXISTS escalas (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  nome text NOT NULL,
+  descricao text,
+  dias_semana integer[] NOT NULL DEFAULT '{}',
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+
 -- Avisos para a equipe, exibidos no dashboard
 CREATE TABLE IF NOT EXISTS avisos (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -196,6 +206,7 @@ GRANT SELECT ON avisos_com_status TO anon, authenticated;
 -- Row Level Security (RLS)
 -- =============================================
 
+ALTER TABLE escalas             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE funcionarios        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metas               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vendas_funcionario  ENABLE ROW LEVEL SECURITY;
@@ -206,6 +217,7 @@ ALTER TABLE produtos_top        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE avisos              ENABLE ROW LEVEL SECURITY;
 
 -- Leitura pública (dashboard sem login)
+CREATE POLICY "Leitura pública - escalas"            ON escalas            FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - funcionarios"       ON funcionarios       FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - metas"              ON metas              FOR SELECT USING (true);
 CREATE POLICY "Leitura pública - vendas_funcionario" ON vendas_funcionario FOR SELECT USING (true);
@@ -218,6 +230,9 @@ CREATE POLICY "Leitura pública - avisos"             ON avisos             FOR 
 -- Escrita apenas para usuários autenticados (admin).
 -- O (select ...) faz o Postgres avaliar a função uma vez por query
 -- em vez de uma vez por linha.
+CREATE POLICY "Admin - escalas" ON escalas
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
 CREATE POLICY "Admin - funcionarios" ON funcionarios
   FOR ALL USING ((select auth.role()) = 'authenticated')
   WITH CHECK ((select auth.role()) = 'authenticated');
@@ -246,6 +261,7 @@ CREATE POLICY "Admin - avisos" ON avisos
 -- =============================================
 -- Índices para melhorar performance
 -- =============================================
+CREATE INDEX IF NOT EXISTS idx_escalas_ativo              ON escalas(ativo);
 CREATE INDEX IF NOT EXISTS idx_metas_mes_ano              ON metas(mes, ano);
 CREATE INDEX IF NOT EXISTS idx_vendas_funcionario_mes_ano ON vendas_funcionario(mes, ano);
 CREATE INDEX IF NOT EXISTS idx_metas_loja_mes_ano         ON metas_loja(mes, ano);

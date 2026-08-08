@@ -136,6 +136,16 @@ const anoAtual = now.getFullYear();
     </div>
   </div>
 
+  <!-- Escalas de Trabalho -->
+  <section class="card section" id="escalas-section" hidden>
+    <div class="card-header">
+      <span class="card-title">📋 Escalas de Trabalho</span>
+    </div>
+    <div class="card-body" id="escalas-body">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </section>
+
   <!-- Top Produtos -->
   <section class="card section">
     <div class="card-header">
@@ -722,6 +732,41 @@ const anoAtual = now.getFullYear();
     </table></div>`;
   }
 
+  // ===== ESCALAS =====
+  async function loadEscalas() {
+    const section = document.getElementById('escalas-section') as HTMLElement;
+    const body = document.getElementById('escalas-body')!;
+
+    const { data, error } = await supabase
+      .from('escalas')
+      .select('*')
+      .eq('ativo', true)
+      .order('nome');
+
+    if (error || !data || data.length === 0) {
+      section.hidden = true;
+      return;
+    }
+
+    const DIAS_NOME = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    const ORDEM = [1,2,3,4,5,6,0];
+
+    section.hidden = false;
+    body.innerHTML = `<div class="escala-list">${data.map((e: any) => {
+      const set = new Set<number>(e.dias_semana ?? []);
+      const diasHtml = ORDEM.map(d =>
+        `<span class="dia-tag ${set.has(d) ? 'ativo' : 'inativo'}">${DIAS_NOME[d]}</span>`
+      ).join('');
+      return `<div class="escala-card">
+        <div class="escala-info">
+          <div class="escala-nome">${escapeHtml(e.nome)}</div>
+          ${e.descricao ? `<div class="escala-desc">${escapeHtml(e.descricao)}</div>` : ''}
+          <div class="dia-tags">${diasHtml}</div>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
   // ===== AVISOS =====
   async function loadAvisos() {
     const { data, error } = await supabase
@@ -799,7 +844,7 @@ const anoAtual = now.getFullYear();
 
   // ===== LOAD ALL =====
   function loadAll() {
-    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos();
+    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos(); loadEscalas();
   }
 
   // Aniversários dependem só do mês, mas precisam recarregar junto:

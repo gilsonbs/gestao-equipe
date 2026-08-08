@@ -818,6 +818,19 @@ tbody tr:hover td { background: var(--slate-50); }
 .prog-legend-item { display:inline-flex; align-items:center; gap:4px; }
 @media (max-width:700px) { .prog-stats { grid-template-columns:repeat(2,1fr); } }
 
+/* ---------- Escalas ---------- */
+.dia-tags { display:flex; gap:3px; flex-wrap:wrap; }
+.dia-tag { font-size:.65rem; font-weight:700; padding:2px 5px; border-radius:4px; letter-spacing:.02em; }
+.dia-tag.ativo { background:var(--accent); color:#fff; }
+.dia-tag.inativo { background:var(--slate-100); color:var(--text-muted); }
+
+.escala-card { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--sp-4); padding:var(--sp-3) var(--sp-4); background:var(--slate-50); border-radius:var(--radius); margin-bottom:var(--sp-2); }
+.escala-card:last-child { margin-bottom:0; }
+.escala-info { min-width:0; flex:1; }
+.escala-nome { font-weight:600; font-size:.9rem; margin-bottom:4px; }
+.escala-desc { font-size:.75rem; color:var(--text-muted); margin-bottom:var(--sp-2); }
+.escala-list { display:flex; flex-direction:column; gap:var(--sp-2); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important;
