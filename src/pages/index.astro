@@ -84,6 +84,14 @@ const anoAtual = now.getFullYear();
     <div class="card-body" id="ritmo-body"></div>
   </section>
 
+  <!-- Entregas por Mês -->
+  <section id="entregas-section" class="card section" hidden>
+    <div class="card-header">
+      <span class="card-title">📦 Entregas por Mês</span>
+    </div>
+    <div class="card-body" id="entregas-body"></div>
+  </section>
+
   <div class="grid-2 section">
     <!-- Metas dos Funcionários -->
     <div class="card">
@@ -320,6 +328,103 @@ const anoAtual = now.getFullYear();
             <div class="ritmo-kpi-sub">${k.sub}</div>
           </div>`;
         }).join('')}
+      </div>`;
+  }
+
+  // ===== ENTREGAS =====
+  function getUltimosMeses(mes: number, ano: number, n: number = 6) {
+    const lista: { mes: number; ano: number }[] = [];
+    for (let i = n - 1; i >= 0; i--) {
+      let m = mes - i;
+      let a = ano;
+      while (m <= 0) { m += 12; a--; }
+      lista.push({ mes: m, ano: a });
+    }
+    return lista;
+  }
+
+  function gerarGraficoEntregas(dados: { mes: number; ano: number; quantidade: number }[], mesSel: number, anoSel: number) {
+    const W = 400, H = 140;
+    const pad = { t: 24, r: 12, b: 26, l: 12 };
+    const aw = W - pad.l - pad.r;
+    const ah = H - pad.t - pad.b;
+    const n = dados.length;
+    if (n === 0) return '';
+
+    const maxVal = Math.max(...dados.map(d => d.quantidade), 1);
+    const gap = 8;
+    const barW = Math.floor((aw - (n - 1) * gap) / n);
+
+    const bars = dados.map((d, i) => {
+      const x = pad.l + i * (barW + gap);
+      const isSel = d.mes === mesSel && d.ano === anoSel;
+      const barH = d.quantidade > 0
+        ? Math.max(Math.round((d.quantidade / maxVal) * ah), 4)
+        : 2;
+      const y = pad.t + ah - barH;
+      const fill = isSel ? 'var(--accent)' : (d.quantidade > 0 ? 'var(--slate-200)' : 'var(--slate-100)');
+      const textFill = isSel ? 'var(--accent)' : 'var(--text-muted)';
+      const fw = isSel ? '700' : '400';
+      const label = MESES_SHORT[d.mes];
+      return [
+        `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="3" fill="${fill}"/>`,
+        d.quantidade > 0 ? `<text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" font-size="10" fill="${textFill}" font-weight="${fw}">${d.quantidade}</text>` : '',
+        `<text x="${x + barW / 2}" y="${H - 6}" text-anchor="middle" font-size="9" fill="${textFill}" font-weight="${fw}">${label}</text>`,
+      ].join('');
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${bars}</svg>`;
+  }
+
+  async function loadEntregas() {
+    const mes = getMes(); const ano = getAno();
+    const section = document.getElementById('entregas-section') as HTMLElement;
+    const body = document.getElementById('entregas-body')!;
+
+    const periodos = getUltimosMeses(mes, ano, 6);
+
+    const { data, error } = await supabase
+      .from('entregas')
+      .select('mes, ano, quantidade')
+      .order('ano').order('mes');
+
+    if (error) { section.hidden = true; return; }
+
+    const dataMap = new Map<string, number>();
+    (data ?? []).forEach((d: any) => dataMap.set(`${d.ano}-${d.mes}`, Number(d.quantidade)));
+
+    const dados = periodos.map(p => ({
+      mes: p.mes,
+      ano: p.ano,
+      quantidade: dataMap.get(`${p.ano}-${p.mes}`) ?? 0,
+    }));
+
+    if (dados.every(d => d.quantidade === 0)) { section.hidden = true; return; }
+    section.hidden = false;
+
+    const idx = dados.length - 1;
+    const qtdAtual = dados[idx].quantidade;
+    const prev = idx >= 1 ? dados[idx - 1] : null;
+    const qtdPrev = prev?.quantidade ?? 0;
+
+    const delta = prev !== null && qtdPrev > 0
+      ? Math.round(((qtdAtual - qtdPrev) / qtdPrev) * 100)
+      : null;
+
+    const deltaHtml = delta !== null
+      ? `<div class="entregas-delta" style="color:${delta >= 0 ? 'var(--success)' : 'var(--danger)'}">
+           ${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% vs ${MESES_SHORT[prev!.mes]}
+         </div>`
+      : '';
+
+    body.innerHTML = `
+      <div class="entregas-wrap">
+        <div class="entregas-stat">
+          <div class="entregas-num">${qtdAtual.toLocaleString('pt-BR')}</div>
+          <div class="entregas-label">em ${MESES_SHORT[mes]}/${ano}</div>
+          ${deltaHtml}
+        </div>
+        <div class="entregas-chart">${gerarGraficoEntregas(dados, mes, ano)}</div>
       </div>`;
   }
 
@@ -848,15 +953,13 @@ const anoAtual = now.getFullYear();
 
   // ===== LOAD ALL =====
   function loadAll() {
-    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos(); loadEscalas();
+    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos(); loadEscalas(); loadEntregas();
   }
 
-  // Aniversários dependem só do mês, mas precisam recarregar junto:
-  // sem isso o card ficava preso no mês em que a página abriu.
   selMes.addEventListener('change', () => {
-    loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadAniversarios();
+    loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadAniversarios(); loadEntregas();
   });
-  selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); });
+  selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadEntregas(); });
 
   loadAll();
 </script>
@@ -955,6 +1058,14 @@ const anoAtual = now.getFullYear();
   .prod-filtros #busca-prod { width: 15rem; }
   .prod-filtros #prod-mes { width: auto; }
 
+  /* ---------- Entregas ---------- */
+  .entregas-wrap { display: flex; gap: var(--sp-5); align-items: center; }
+  .entregas-stat { min-width: 9rem; flex-shrink: 0; }
+  .entregas-num { font-size: 2.25rem; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; color: var(--accent); }
+  .entregas-label { font-size: .8rem; color: var(--text-muted); margin-top: 3px; }
+  .entregas-delta { font-size: .8rem; font-weight: 600; margin-top: 6px; }
+  .entregas-chart { flex: 1; min-width: 0; }
+
   @media (max-width: 640px) {
     .brand-sub { display: none; }
     .admin-link span { display: none; }
@@ -962,6 +1073,8 @@ const anoAtual = now.getFullYear();
     .prod-filtros #busca-prod,
     .prod-filtros #prod-mes { width: 100%; }
     .aviso { padding: var(--sp-3); }
+    .entregas-wrap { flex-direction: column; }
+    .entregas-stat { text-align: center; }
   }
 </style>
 </body>
