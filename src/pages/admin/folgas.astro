@@ -42,7 +42,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">Funcionário *</label>
-          <select class="form-control" id="funcionario_id" required><option value="">Selecione...</option></select>
+          <select class="form-control" id="funcionario_id" required>
+            <option value="">Selecione...</option>
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label">Tipo *</label>
@@ -51,17 +53,36 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
             <option value="ferias">Férias</option>
           </select>
         </div>
-        <div class="grid-2">
-          <div class="form-group">
-            <label class="form-label">Data Início *</label>
-            <input class="form-control" type="date" id="data_inicio" required />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Data Fim *</label>
-            <input class="form-control" type="date" id="data_fim" required />
+
+        <!-- Modo Folga: calendário de múltipla seleção -->
+        <div id="modo-folga">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Dias de Folga *</label>
+            <div class="fc-nav">
+              <button type="button" class="btn btn-ghost btn-sm" id="cal-prev">‹</button>
+              <span id="cal-label" style="font-weight:600;min-width:10rem;text-align:center;font-size:.9rem"></span>
+              <button type="button" class="btn btn-ghost btn-sm" id="cal-next">›</button>
+            </div>
+            <div class="fc-grid" id="fc-grid"></div>
+            <div id="dias-info" class="fc-info">Nenhum dia selecionado</div>
           </div>
         </div>
-        <div id="form-error" class="alert alert-danger" style="display:none"></div>
+
+        <!-- Modo Férias: intervalo de datas -->
+        <div id="modo-ferias" style="display:none">
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Data Início *</label>
+              <input class="form-control" type="date" id="data_inicio" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Data Fim *</label>
+              <input class="form-control" type="date" id="data_fim" />
+            </div>
+          </div>
+        </div>
+
+        <div id="form-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-3);margin-bottom:0"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
@@ -74,9 +95,107 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 <script>
   import { supabase } from '../../lib/supabase';
 
+  const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const DIAS_SEMANA = ['D','S','T','Q','Q','S','S'];
+
   let editingId: string | null = null;
   let currentFilter = '';
 
+  // Estado do calendário de folgas
+  let calMes = new Date().getMonth() + 1;
+  let calAno = new Date().getFullYear();
+  let diasSelecionados = new Set<string>(); // 'YYYY-MM-DD'
+  let modoEdicaoUnico = false; // true quando editando (só 1 dia)
+
+  // ===== CALENDÁRIO DE FOLGAS =====
+  function isoDate(ano: number, mes: number, dia: number) {
+    return `${ano}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
+  }
+
+  function renderCalendario() {
+    const grid = document.getElementById('fc-grid')!;
+    const label = document.getElementById('cal-label')!;
+    const info = document.getElementById('dias-info')!;
+
+    label.textContent = `${MESES[calMes]} ${calAno}`;
+
+    const diasNoMes = new Date(calAno, calMes, 0).getDate();
+    const primeiroDia = new Date(calAno, calMes - 1, 1).getDay();
+    const hoje = new Date();
+    const isHoje = (d: number) =>
+      hoje.getDate() === d && hoje.getMonth() + 1 === calMes && hoje.getFullYear() === calAno;
+
+    const cabecalho = DIAS_SEMANA.map(d => `<div class="fc-dow">${d}</div>`).join('');
+    const vazias = Array.from({ length: primeiroDia }, () => '<div class="fc-day vazia"></div>').join('');
+    const celulas = Array.from({ length: diasNoMes }, (_, i) => {
+      const dia = i + 1;
+      const iso = isoDate(calAno, calMes, dia);
+      const sel = diasSelecionados.has(iso);
+      const classes = ['fc-day', sel ? 'selected' : '', isHoje(dia) ? 'hoje' : ''].filter(Boolean).join(' ');
+      return `<div class="${classes}" data-iso="${iso}">${dia}</div>`;
+    }).join('');
+
+    grid.innerHTML = cabecalho + vazias + celulas;
+
+    grid.querySelectorAll<HTMLElement>('.fc-day:not(.vazia)').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const iso = cell.dataset.iso!;
+        if (modoEdicaoUnico) {
+          // Edição: apenas um dia por vez
+          diasSelecionados.clear();
+          grid.querySelectorAll('.fc-day.selected').forEach(c => c.classList.remove('selected'));
+          diasSelecionados.add(iso);
+          cell.classList.add('selected');
+        } else {
+          if (diasSelecionados.has(iso)) {
+            diasSelecionados.delete(iso);
+            cell.classList.remove('selected');
+          } else {
+            diasSelecionados.add(iso);
+            cell.classList.add('selected');
+          }
+        }
+        atualizarInfo();
+      });
+    });
+
+    atualizarInfo();
+  }
+
+  function atualizarInfo() {
+    const info = document.getElementById('dias-info')!;
+    const n = diasSelecionados.size;
+    if (n === 0) {
+      info.textContent = 'Nenhum dia selecionado';
+      info.style.color = 'var(--text-muted)';
+    } else {
+      info.textContent = `${n} dia${n > 1 ? 's' : ''} selecionado${n > 1 ? 's' : ''}`;
+      info.style.color = 'var(--accent)';
+    }
+  }
+
+  document.getElementById('cal-prev')?.addEventListener('click', () => {
+    calMes--; if (calMes < 1) { calMes = 12; calAno--; }
+    renderCalendario();
+  });
+  document.getElementById('cal-next')?.addEventListener('click', () => {
+    calMes++; if (calMes > 12) { calMes = 1; calAno++; }
+    renderCalendario();
+  });
+
+  // ===== ALTERNAR MODO FOLGA / FÉRIAS =====
+  function setModo(tipo: string) {
+    const mf = document.getElementById('modo-folga')!;
+    const mv = document.getElementById('modo-ferias')!;
+    if (tipo === 'ferias') { mf.style.display = 'none'; mv.style.display = ''; }
+    else { mf.style.display = ''; mv.style.display = 'none'; }
+  }
+
+  document.getElementById('tipo')?.addEventListener('change', (e) => {
+    setModo((e.target as HTMLSelectElement).value);
+  });
+
+  // ===== LISTA =====
   async function load() {
     let query = supabase
       .from('folgas')
@@ -97,7 +216,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const badge = f.tipo === 'ferias' ? 'badge-info' : 'badge-warning';
       const label = f.tipo === 'ferias' ? '🏖️ Férias' : '📋 Folga';
       return `<tr>
-        <td data-label="Funcionário"><strong>${f.funcionarios?.nome ?? '—'}</strong></td>
+        <td data-label="Funcionário"><strong>${escapeHtml(f.funcionarios?.nome ?? '—')}</strong></td>
         <td data-label="Tipo"><span class="badge ${badge}">${label}</span></td>
         <td data-label="Início">${formatDate(f.data_inicio)}</td>
         <td data-label="Fim">${formatDate(f.data_fim)}</td>
@@ -108,6 +227,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         </td>
       </tr>`;
     }).join('');
+  }
+
+  function escapeHtml(s: string) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]!));
   }
 
   function formatDate(d: string) {
@@ -125,20 +249,35 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     });
   }
 
+  // ===== MODAL =====
   function openModal() { document.getElementById('modal')!.style.display = 'flex'; }
+
   function closeModal() {
     document.getElementById('modal')!.style.display = 'none';
     (document.getElementById('form-error') as HTMLElement).style.display = 'none';
+    diasSelecionados.clear();
     editingId = null;
+    modoEdicaoUnico = false;
   }
 
-  document.getElementById('btn-novo')?.addEventListener('click', () => {
+  function resetParaNovo() {
+    const now = new Date();
+    calMes = now.getMonth() + 1;
+    calAno = now.getFullYear();
+    diasSelecionados.clear();
+    modoEdicaoUnico = false;
+    editingId = null;
     document.getElementById('modal-title')!.textContent = 'Agendar Folga/Férias';
     (document.getElementById('funcionario_id') as HTMLSelectElement).value = '';
     (document.getElementById('tipo') as HTMLSelectElement).value = 'folga';
     (document.getElementById('data_inicio') as HTMLInputElement).value = '';
     (document.getElementById('data_fim') as HTMLInputElement).value = '';
-    editingId = null;
+    setModo('folga');
+    renderCalendario();
+  }
+
+  document.getElementById('btn-novo')?.addEventListener('click', () => {
+    resetParaNovo();
     openModal();
   });
   document.getElementById('modal-close')?.addEventListener('click', closeModal);
@@ -151,48 +290,87 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     document.getElementById('modal-title')!.textContent = 'Editar Folga/Férias';
     (document.getElementById('funcionario_id') as HTMLSelectElement).value = data.funcionario_id;
     (document.getElementById('tipo') as HTMLSelectElement).value = data.tipo;
-    (document.getElementById('data_inicio') as HTMLInputElement).value = data.data_inicio;
-    (document.getElementById('data_fim') as HTMLInputElement).value = data.data_fim;
+    setModo(data.tipo);
+
+    if (data.tipo === 'folga') {
+      // Pré-seleciona o dia no calendário (modo edição = 1 dia)
+      modoEdicaoUnico = true;
+      diasSelecionados.clear();
+      diasSelecionados.add(data.data_inicio);
+      const [y, m] = data.data_inicio.split('-').map(Number);
+      calAno = y; calMes = m;
+      renderCalendario();
+    } else {
+      modoEdicaoUnico = false;
+      (document.getElementById('data_inicio') as HTMLInputElement).value = data.data_inicio;
+      (document.getElementById('data_fim') as HTMLInputElement).value = data.data_fim;
+    }
     openModal();
   };
 
   (window as any).deleteFolga = async (id: string) => {
     if (!confirm('Excluir este registro?')) return;
     const { error } = await supabase.from('folgas').delete().eq('id', id);
-    if (error) { alert('Erro ao excluir o registro: ' + error.message); return; }
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
     load();
   };
 
+  // ===== SALVAR =====
   document.getElementById('btn-save')?.addEventListener('click', async () => {
     const funcionario_id = (document.getElementById('funcionario_id') as HTMLSelectElement).value;
     const tipo = (document.getElementById('tipo') as HTMLSelectElement).value;
-    const data_inicio = (document.getElementById('data_inicio') as HTMLInputElement).value;
-    const data_fim = (document.getElementById('data_fim') as HTMLInputElement).value;
     const errorDiv = document.getElementById('form-error')!;
 
-    if (!funcionario_id || !data_inicio || !data_fim) {
-      errorDiv.textContent = 'Preencha todos os campos obrigatórios.';
+    if (!funcionario_id) {
+      errorDiv.textContent = 'Selecione um funcionário.';
       errorDiv.style.display = 'block'; return;
     }
-    if (data_fim < data_inicio) {
-      errorDiv.textContent = 'Data fim deve ser igual ou após a data início.';
-      errorDiv.style.display = 'block'; return;
-    }
-    errorDiv.style.display = 'none';
 
-    const { error } = editingId
-      ? await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim }).eq('id', editingId)
-      : await supabase.from('folgas').insert({ funcionario_id, tipo, data_inicio, data_fim });
+    if (tipo === 'folga') {
+      if (diasSelecionados.size === 0) {
+        errorDiv.textContent = 'Selecione pelo menos um dia de folga.';
+        errorDiv.style.display = 'block'; return;
+      }
+      errorDiv.style.display = 'none';
 
-    if (error) {
-      errorDiv.textContent = 'Erro ao salvar o registro: ' + error.message;
-      errorDiv.style.display = 'block';
-      return;
+      const dias = Array.from(diasSelecionados).sort();
+
+      if (editingId) {
+        // Edição: atualiza o único registro com o dia selecionado
+        const dia = dias[0];
+        const { error } = await supabase.from('folgas')
+          .update({ funcionario_id, tipo, data_inicio: dia, data_fim: dia })
+          .eq('id', editingId);
+        if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
+      } else {
+        // Criação: insere um registro por dia selecionado
+        const registros = dias.map(d => ({ funcionario_id, tipo, data_inicio: d, data_fim: d }));
+        const { error } = await supabase.from('folgas').insert(registros);
+        if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
+      }
+    } else {
+      // Férias: intervalo de datas
+      const data_inicio = (document.getElementById('data_inicio') as HTMLInputElement).value;
+      const data_fim = (document.getElementById('data_fim') as HTMLInputElement).value;
+      if (!data_inicio || !data_fim) {
+        errorDiv.textContent = 'Preencha as datas de início e fim.';
+        errorDiv.style.display = 'block'; return;
+      }
+      if (data_fim < data_inicio) {
+        errorDiv.textContent = 'Data fim deve ser igual ou após a data início.';
+        errorDiv.style.display = 'block'; return;
+      }
+      errorDiv.style.display = 'none';
+      const { error } = editingId
+        ? await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim }).eq('id', editingId)
+        : await supabase.from('folgas').insert({ funcionario_id, tipo, data_inicio, data_fim });
+      if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
     }
+
     closeModal(); load();
   });
 
-  // Filters
+  // ===== FILTROS =====
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -202,10 +380,63 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     });
   });
 
-  loadFuncionarios(); load();
+  loadFuncionarios();
+  load();
+  renderCalendario();
 </script>
 
 <style>
   .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-</style>
 
+  /* Navegação do calendário de folgas */
+  .fc-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-2);
+  }
+
+  /* Grade do calendário */
+  .fc-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: var(--sp-2);
+  }
+
+  .fc-dow {
+    text-align: center;
+    font-size: .68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding: 2px 0 4px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+
+  .fc-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .82rem;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: background .1s, color .1s;
+    user-select: none;
+  }
+  .fc-day:hover:not(.vazia) { background: var(--slate-100); }
+  .fc-day.selected { background: var(--accent); color: #fff; font-weight: 600; }
+  .fc-day.selected:hover { background: var(--accent); opacity: .85; }
+  .fc-day.hoje { border-color: var(--accent); }
+  .fc-day.hoje.selected { border-color: transparent; }
+  .fc-day.vazia { cursor: default; }
+
+  .fc-info {
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    min-height: 1.2rem;
+  }
+</style>
