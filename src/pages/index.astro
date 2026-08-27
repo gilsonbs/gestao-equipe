@@ -140,32 +140,30 @@ const anoAtual = now.getFullYear();
     </div>
   </div>
 
-  <div class="grid-2 section">
-    <!-- Calendário de Folgas -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">📅 Folgas & Férias</span>
-        <div style="display:flex;gap:.5rem">
-          <button class="btn btn-ghost btn-sm filter-tipo active" data-tipo="">Todos</button>
-          <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="folga">Folgas</button>
-          <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="ferias">Férias</button>
-          <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="horario">Horários</button>
-        </div>
-      </div>
-      <div class="card-body" id="folgas-body">
-        <div class="loading"><div class="spinner"></div> Carregando...</div>
+  <!-- Calendário de Folgas — largura total para legibilidade -->
+  <div class="card section">
+    <div class="card-header">
+      <span class="card-title">📅 Folgas & Férias</span>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm filter-tipo active" data-tipo="">Todos</button>
+        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="folga">Folgas</button>
+        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="ferias">Férias</button>
+        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="horario">Horários</button>
       </div>
     </div>
+    <div class="card-body" id="folgas-body">
+      <div class="loading"><div class="spinner"></div> Carregando...</div>
+    </div>
+  </div>
 
-    <!-- Vendas por Funcionário -->
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">💰 Vendas por Funcionário</span>
-        <span id="vendas-periodo" style="font-size:.8rem;color:#64748b"></span>
-      </div>
-      <div class="card-body" id="vendas-body">
-        <div class="loading"><div class="spinner"></div> Carregando...</div>
-      </div>
+  <!-- Vendas por Funcionário -->
+  <div class="card section">
+    <div class="card-header">
+      <span class="card-title">💰 Vendas por Funcionário</span>
+      <span id="vendas-periodo" style="font-size:.8rem;color:#64748b"></span>
+    </div>
+    <div class="card-body" id="vendas-body">
+      <div class="loading"><div class="spinner"></div> Carregando...</div>
     </div>
   </div>
 
