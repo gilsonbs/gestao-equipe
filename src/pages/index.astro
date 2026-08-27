@@ -722,7 +722,10 @@ const anoAtual = now.getFullYear();
 
       // As duas formas são geradas sempre; o CSS escolhe qual mostrar
       // conforme a largura da tela.
-      return `<div class="${classes.join(' ')}" title="${escapeHtml(titulo)}">
+      const dataInfo = gente.length
+        ? ` data-dia="${dia}" data-info='${JSON.stringify(gente).replace(/'/g, '&#39;')}' role="button" tabindex="0" aria-label="${escapeHtml(titulo)}" style="cursor:pointer"`
+        : '';
+      return `<div class="${classes.join(' ')}" title="${escapeHtml(titulo)}"${dataInfo}>
         <span class="cal-num">${dia}</span>
         <span class="cal-pontos">${pontos}</span>
         <span class="cal-nomes">${nomes}</span>
@@ -994,6 +997,62 @@ const anoAtual = now.getFullYear();
     if (el) el.textContent = `${MESES[mes]} / ${ano} · emitido em ${new Date().toLocaleDateString('pt-BR')}`;
   });
   document.getElementById('btn-export-pdf')?.addEventListener('click', () => window.print());
+
+  // ===== MODAL DETALHE DO DIA =====
+  const modalDia = document.getElementById('modal-dia')!;
+  const modalTitulo = document.getElementById('modal-dia-titulo')!;
+  const modalBody = document.getElementById('modal-dia-body')!;
+
+  function abrirModalDia(dia: number, gente: { nome: string; tipo: string; observacao?: string }[], mesAtual: number, anoAtual: number) {
+    const data = new Date(anoAtual, mesAtual - 1, dia);
+    const opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+    modalTitulo.textContent = data.toLocaleDateString('pt-BR', opts).replace(/^\w/, c => c.toUpperCase());
+
+    const rotuloMap: Record<string, string> = { folga: 'Folga', ferias: 'Férias', horario: 'Horário' };
+    const emojiMap: Record<string, string> = { folga: '📋', ferias: '🏖️', horario: '🕐' };
+
+    modalBody.innerHTML = gente.map(g => {
+      const badge = escapeHtml(rotuloMap[g.tipo] ?? g.tipo);
+      const obs = g.tipo === 'horario' && g.observacao ? `<div class="modal-item-obs">${escapeHtml(g.observacao)}</div>` : '';
+      return `<div class="modal-item">
+        <div style="flex:1;min-width:0">
+          <div class="modal-item-nome">${escapeHtml(g.nome)}</div>
+          ${obs}
+        </div>
+        <span class="modal-item-badge ${g.tipo}">${emojiMap[g.tipo] ?? ''} ${badge}</span>
+      </div>`;
+    }).join('');
+
+    modalDia.classList.add('aberto');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function fecharModalDia() {
+    modalDia.classList.remove('aberto');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('modal-dia-fechar')?.addEventListener('click', fecharModalDia);
+  modalDia.addEventListener('click', (e) => { if (e.target === modalDia) fecharModalDia(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharModalDia(); });
+
+  // Delegação — funciona para células geradas dinamicamente
+  document.getElementById('folgas-body')?.addEventListener('click', (e) => {
+    const cel = (e.target as Element).closest('[data-dia]') as HTMLElement | null;
+    if (!cel) return;
+    const dia = parseInt(cel.dataset.dia!);
+    const gente = JSON.parse(cel.dataset.info!);
+    abrirModalDia(dia, gente, getMes(), getAno());
+  });
+  document.getElementById('folgas-body')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const cel = (e.target as Element).closest('[data-dia]') as HTMLElement | null;
+    if (!cel) return;
+    e.preventDefault();
+    const dia = parseInt(cel.dataset.dia!);
+    const gente = JSON.parse(cel.dataset.info!);
+    abrirModalDia(dia, gente, getMes(), getAno());
+  });
 </script>
 
 <style>
@@ -1158,6 +1217,37 @@ const anoAtual = now.getFullYear();
     /* Cards mais limpos */
     .card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; break-inside: avoid; }
 
+    /* Modal de detalhe do dia */
+    #modal-dia { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.55); padding:1rem; align-items:flex-end; justify-content:center; }
+    #modal-dia.aberto { display:flex; }
+    @media (min-width:480px) {
+      #modal-dia { align-items:center; }
+    }
+    #modal-dia-inner {
+      background:var(--surface-card); border-radius:1rem; width:100%; max-width:420px;
+      box-shadow:0 20px 60px rgba(0,0,0,.35); overflow:hidden;
+      animation: slideUp .2s ease;
+    }
+    @keyframes slideUp { from { transform:translateY(40px); opacity:0; } to { transform:none; opacity:1; } }
+    #modal-dia-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:.9rem 1.1rem .75rem; border-bottom:1px solid var(--border);
+    }
+    #modal-dia-titulo { font-weight:700; font-size:1rem; }
+    #modal-dia-fechar {
+      background:none; border:none; cursor:pointer; color:var(--text-muted);
+      font-size:1.25rem; line-height:1; padding:.25rem; border-radius:.375rem;
+    }
+    #modal-dia-fechar:hover { background:var(--surface-hover); color:var(--text); }
+    #modal-dia-body { padding:.85rem 1.1rem 1.1rem; display:flex; flex-direction:column; gap:.55rem; }
+    .modal-item { display:flex; align-items:flex-start; gap:.6rem; padding:.55rem .7rem; border-radius:.6rem; background:var(--surface); }
+    .modal-item-nome { font-weight:600; font-size:.92rem; }
+    .modal-item-obs { font-size:.82rem; color:var(--text-muted); margin-top:.1rem; }
+    .modal-item-badge { font-size:.72rem; padding:.2rem .5rem; border-radius:999px; white-space:nowrap; margin-left:auto; flex-shrink:0; }
+    .modal-item-badge.folga { background:#fef9c3; color:#854d0e; border:1px solid #fde68a; }
+    .modal-item-badge.ferias { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
+    .modal-item-badge.horario { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+
     /* Seções sem dados ficam ocultas */
     [hidden] { display: none !important; }
 
@@ -1170,6 +1260,17 @@ const anoAtual = now.getFullYear();
     .ritmo-kpis { grid-template-columns: repeat(3, 1fr) !important; }
   }
 </style>
+
+<!-- Modal detalhe do dia -->
+<div id="modal-dia" role="dialog" aria-modal="true" aria-labelledby="modal-dia-titulo">
+  <div id="modal-dia-inner">
+    <div id="modal-dia-header">
+      <span id="modal-dia-titulo"></span>
+      <button id="modal-dia-fechar" aria-label="Fechar">✕</button>
+    </div>
+    <div id="modal-dia-body"></div>
+  </div>
+</div>
 </body>
 </html>
 
