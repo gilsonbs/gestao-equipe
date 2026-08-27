@@ -235,7 +235,8 @@ tbody tr:hover td { background: var(--slate-50); }
 .badge-warning { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-border); }
 .badge-danger  { background: var(--danger-soft);  color: var(--danger);  border-color: var(--danger-border); }
 .badge-info    { background: var(--info-soft);    color: var(--info);    border-color: var(--info-border); }
-.badge-neutral { background: var(--slate-100);    color: var(--slate-600); border-color: var(--slate-200); }
+.badge-neutral  { background: var(--slate-100);    color: var(--slate-600); border-color: var(--slate-200); }
+.badge-horario  { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
 
 /* ---------- Barra de progresso ---------- */
 .progress {
@@ -497,7 +498,7 @@ tbody tr:hover td { background: var(--slate-50); }
 .cal {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
 }
 
 .cal-dow {
@@ -550,33 +551,45 @@ tbody tr:hover td { background: var(--slate-50); }
   text-overflow: ellipsis;
   min-width: 0;
 }
-.cal-nome.folga  { background: var(--warning-soft); color: var(--warning); }
-.cal-nome.ferias { background: var(--info-soft);    color: var(--info); }
-.cal-nome.mais   { color: var(--text-muted); font-weight: 600; padding-left: 2px; }
+.cal-nome.folga   { background: var(--warning-soft); color: var(--warning); }
+.cal-nome.ferias  { background: var(--info-soft);    color: var(--info); }
+.cal-nome.horario { background: #fff7ed; color: #c2410c; }
+.cal-nome.mais    { color: var(--text-muted); font-weight: 600; padding-left: 2px; }
 
-/* 480px de card ÷ 7 colunas ≈ 65px por célula. Medido: um primeiro
-   nome comum a .65rem ocupa ~40px com o respiro do chip, então 65px
-   comporta a maioria sem cortar. Abaixo disso vira reticências e as
-   bolinhas informam mais. */
+/* 480px de card ÷ 7 colunas ≈ 65px por célula — nomes aparecem.
+   Em 700px+ (calendário em largura total) a célula cresce mais. */
 @container (min-width: 480px) {
   .cal-dia {
     aspect-ratio: auto;
-    min-height: 4.75rem;
+    min-height: 5.25rem;
     align-items: stretch;
     justify-content: flex-start;
-    padding: 4px 5px;
+    padding: 5px 6px;
   }
-  .cal-num { font-size: .72rem; margin-bottom: 2px; }
+  .cal-num { font-size: .78rem; margin-bottom: 3px; }
   .cal-nomes { display: flex; }
   .cal-pontos { display: none; }
 }
 
+@container (min-width: 700px) {
+  .cal-dia { min-height: 6.5rem; padding: 7px 8px; }
+  .cal-num { font-size: .85rem; }
+  .cal-nome { font-size: .72rem; padding: 2px 5px; }
+}
+
 .cal-dia.ocupado { border-color: var(--slate-300); }
-.cal-dia.tem-folga  { background: var(--warning-soft); }
-.cal-dia.tem-ferias { background: var(--info-soft); }
-/* Dia com os dois tipos: metade e metade, para não escolher um vencedor */
+.cal-dia.tem-folga   { background: var(--warning-soft); }
+.cal-dia.tem-ferias  { background: var(--info-soft); }
+.cal-dia.tem-horario { background: #fff7ed; }
+/* Dia com múltiplos tipos: gradiente para não escolher um vencedor */
 .cal-dia.tem-folga.tem-ferias {
   background: linear-gradient(135deg, var(--warning-soft) 50%, var(--info-soft) 50%);
+}
+.cal-dia.tem-folga.tem-horario {
+  background: linear-gradient(135deg, var(--warning-soft) 50%, #fff7ed 50%);
+}
+.cal-dia.tem-ferias.tem-horario {
+  background: linear-gradient(135deg, var(--info-soft) 50%, #fff7ed 50%);
 }
 .cal-dia.ocupado .cal-num { color: var(--text); font-weight: 650; }
 
@@ -604,8 +617,9 @@ tbody tr:hover td { background: var(--slate-50); }
   flex-shrink: 0;
   display: inline-block;
 }
-.cal-ponto.folga  { background: var(--warning); }
-.cal-ponto.ferias { background: var(--info); }
+.cal-ponto.folga   { background: var(--warning); }
+.cal-ponto.ferias  { background: var(--info); }
+.cal-ponto.horario { background: #c2410c; }
 
 .cal-mais { font-size: .55rem; font-weight: 600; color: var(--text-muted); line-height: 1; }
 
