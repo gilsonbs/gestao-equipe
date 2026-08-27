@@ -556,21 +556,29 @@ tbody tr:hover td { background: var(--slate-50); }
 .cal-nome.horario { background: #fff7ed; color: #c2410c; }
 .cal-nome.mais    { color: var(--text-muted); font-weight: 600; padding-left: 2px; }
 
-/* 480px de card ÷ 7 colunas ≈ 65px por célula — nomes aparecem.
-   Em 700px+ (calendário em largura total) a célula cresce mais. */
-@container (min-width: 480px) {
+/* 320px ÷ 7 ≈ 45px por célula — modo compacto com nome visível no celular */
+@container (min-width: 320px) {
   .cal-dia {
     aspect-ratio: auto;
-    min-height: 5.25rem;
+    min-height: 4rem;
     align-items: stretch;
     justify-content: flex-start;
-    padding: 5px 6px;
+    padding: 3px 4px;
   }
-  .cal-num { font-size: .78rem; margin-bottom: 3px; }
+  .cal-num { font-size: .7rem; margin-bottom: 2px; }
   .cal-nomes { display: flex; }
   .cal-pontos { display: none; }
+  .cal-nome { font-size: .58rem; padding: 1px 3px; }
 }
 
+/* 500px ÷ 7 ≈ 70px — nomes com mais espaço */
+@container (min-width: 500px) {
+  .cal-dia { min-height: 5.5rem; padding: 5px 6px; }
+  .cal-num { font-size: .78rem; margin-bottom: 3px; }
+  .cal-nome { font-size: .65rem; padding: 1px 4px; }
+}
+
+/* 700px+ — calendário em largura total, células generosas */
 @container (min-width: 700px) {
   .cal-dia { min-height: 6.5rem; padding: 7px 8px; }
   .cal-num { font-size: .85rem; }
@@ -611,11 +619,15 @@ tbody tr:hover td { background: var(--slate-50); }
 }
 
 .cal-ponto {
-  width: .4rem;
-  height: .4rem;
+  width: .45rem;
+  height: .45rem;
   border-radius: 999px;
   flex-shrink: 0;
   display: inline-block;
+}
+.cal-legenda .cal-ponto {
+  width: .65rem;
+  height: .65rem;
 }
 .cal-ponto.folga   { background: var(--warning); }
 .cal-ponto.ferias  { background: var(--info); }
@@ -627,11 +639,15 @@ tbody tr:hover td { background: var(--slate-50); }
   display: flex;
   gap: var(--sp-4);
   justify-content: center;
-  margin-top: var(--sp-3);
-  font-size: .75rem;
+  flex-wrap: wrap;
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  font-size: .8rem;
   color: var(--text-muted);
 }
-.cal-legenda span { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.cal-legenda span { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.cal-legenda strong { color: var(--text); font-weight: 600; }
 
 .cal-lista {
   list-style: none;

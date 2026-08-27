@@ -103,6 +103,22 @@ const anoAtual = now.getFullYear();
     <div class="card-body" id="entregas-body"></div>
   </section>
 
+  <!-- Calendário de Folgas — largura total, uma posição acima das metas -->
+  <div class="card section">
+    <div class="card-header">
+      <span class="card-title">📅 Folgas & Férias</span>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm filter-tipo active" data-tipo="">Todos</button>
+        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="folga">Folgas</button>
+        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="ferias">Férias</button>
+        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="horario">Horários</button>
+      </div>
+    </div>
+    <div class="card-body" id="folgas-body">
+      <div class="loading"><div class="spinner"></div> Carregando...</div>
+    </div>
+  </div>
+
   <div class="grid-2 section">
     <!-- Metas dos Funcionários -->
     <div class="card">
@@ -137,22 +153,6 @@ const anoAtual = now.getFullYear();
           <div class="loading"><div class="spinner"></div> Carregando...</div>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- Calendário de Folgas — largura total para legibilidade -->
-  <div class="card section">
-    <div class="card-header">
-      <span class="card-title">📅 Folgas & Férias</span>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm filter-tipo active" data-tipo="">Todos</button>
-        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="folga">Folgas</button>
-        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="ferias">Férias</button>
-        <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="horario">Horários</button>
-      </div>
-    </div>
-    <div class="card-body" id="folgas-body">
-      <div class="loading"><div class="spinner"></div> Carregando...</div>
     </div>
   </div>
 
@@ -656,8 +656,10 @@ const anoAtual = now.getFullYear();
     return dias;
   }
 
-  function primeiroNome(nome: string) {
-    return nome.trim().split(/\s+/)[0];
+  function nomeResumido(nome: string) {
+    const partes = nome.trim().split(/\s+/);
+    if (partes.length <= 1) return partes[0] ?? nome;
+    return `${partes[0]} ${partes[partes.length - 1]}`;
   }
 
   function montarCalendario(folgas: any[], mes: number, ano: number) {
@@ -704,12 +706,12 @@ const anoAtual = now.getFullYear();
         .map(g => `<span class="cal-ponto ${g.tipo}"></span>`).join('') +
         (extras > 0 ? `<span class="cal-mais">+${extras}</span>` : '');
 
-      // Só o primeiro nome: é o que cabe na célula e basta para
-      // identificar alguém numa equipe deste tamanho. O nome completo
-      // fica no title e na lista abaixo da grade.
-      const nomes = visiveis.map(g =>
-        `<span class="cal-nome ${g.tipo}" title="${escapeHtml(g.nome)}">${escapeHtml(primeiroNome(g.nome))}</span>`
-      ).join('') + (extras > 0 ? `<span class="cal-nome mais">+${extras}</span>` : '');
+      // Nome + sobrenome; para horário inclui a observação no chip.
+      const nomes = visiveis.map(g => {
+        const nomeLabel = escapeHtml(nomeResumido(g.nome));
+        const obs = g.tipo === 'horario' && g.observacao ? ` · ${escapeHtml(g.observacao)}` : '';
+        return `<span class="cal-nome ${g.tipo}" title="${escapeHtml(g.nome)}${obs ? ' — ' + escapeHtml(g.observacao!) : ''}">${nomeLabel}${obs}</span>`;
+      }).join('') + (extras > 0 ? `<span class="cal-nome mais">+${extras}</span>` : '');
 
       const titulo = gente.length
         ? `${dia}: ${gente.map(g => {
@@ -735,9 +737,9 @@ const anoAtual = now.getFullYear();
           ${cabecalho}${vazias}${celulas}
         </div>
         <div class="cal-legenda">
-          <span><span class="cal-ponto folga"></span> Folga</span>
-          <span><span class="cal-ponto ferias"></span> Férias</span>
-          <span><span class="cal-ponto horario"></span> Horário</span>
+          <span><span class="cal-ponto folga"></span> <strong>Folga</strong></span>
+          <span><span class="cal-ponto ferias"></span> <strong>Férias</strong></span>
+          <span><span class="cal-ponto horario"></span> <strong>Mudança de Horário</strong></span>
         </div>
       </div>`;
   }
