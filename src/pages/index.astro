@@ -665,12 +665,12 @@ const anoAtual = now.getFullYear();
     const vaziosNoInicio = new Date(ano, mes - 1, 1).getDay(); // 0 = domingo
 
     // dia -> lista de quem está de folga/férias naquele dia
-    const porDia = new Map<number, { nome: string; tipo: string }[]>();
+    const porDia = new Map<number, { nome: string; tipo: string; observacao?: string }[]>();
     for (const f of folgas) {
       const nome = f.funcionarios?.nome ?? '—';
       for (const d of diasOcupados(f, mes, ano, diasNoMes)) {
         if (!porDia.has(d)) porDia.set(d, []);
-        porDia.get(d)!.push({ nome, tipo: f.tipo });
+        porDia.get(d)!.push({ nome, tipo: f.tipo, observacao: f.observacao ?? undefined });
       }
     }
 
