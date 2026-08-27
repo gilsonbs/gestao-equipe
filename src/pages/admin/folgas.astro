@@ -7,6 +7,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       <button class="btn btn-ghost btn-sm filter-btn active" data-tipo="">Todos</button>
       <button class="btn btn-ghost btn-sm filter-btn" data-tipo="folga">Folgas</button>
       <button class="btn btn-ghost btn-sm filter-btn" data-tipo="ferias">Férias</button>
+      <button class="btn btn-ghost btn-sm filter-btn" data-tipo="horario">Horários</button>
     </div>
     <button class="btn btn-primary" id="btn-novo">+ Agendar</button>
   </div>
@@ -21,7 +22,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               <th>Tipo</th>
               <th>Início</th>
               <th>Fim</th>
-              <th>Dias</th>
+              <th>Observação</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -36,7 +37,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   <div class="modal-backdrop" id="modal" style="display:none">
     <div class="modal">
       <div class="modal-header">
-        <span class="modal-title" id="modal-title">Agendar Folga/Férias</span>
+        <span class="modal-title" id="modal-title">Agendar</span>
         <button class="modal-close" id="modal-close">✕</button>
       </div>
       <div class="modal-body">
@@ -51,13 +52,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <select class="form-control" id="tipo">
             <option value="folga">Folga</option>
             <option value="ferias">Férias</option>
+            <option value="horario">Mudança de Horário</option>
           </select>
         </div>
 
-        <!-- Modo Folga: calendário de múltipla seleção -->
+        <!-- Modo Folga / Horário: calendário de múltipla seleção -->
         <div id="modo-folga">
           <div class="form-group" style="margin-bottom:0">
-            <label class="form-label">Dias de Folga *</label>
+            <label class="form-label" id="cal-label-tipo">Dias *</label>
             <div class="fc-nav">
               <button type="button" class="btn btn-ghost btn-sm" id="cal-prev">‹</button>
               <span id="cal-label" style="font-weight:600;min-width:10rem;text-align:center;font-size:.9rem"></span>
@@ -65,6 +67,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
             </div>
             <div class="fc-grid" id="fc-grid"></div>
             <div id="dias-info" class="fc-info">Nenhum dia selecionado</div>
+          </div>
+          <!-- Campo observação (aparece só quando tipo = horario) -->
+          <div class="form-group" id="observacao-wrap" style="display:none;margin-top:var(--sp-3)">
+            <label class="form-label">Horário / Observação *</label>
+            <input class="form-control" type="text" id="observacao" placeholder="Ex: 11h CX, saiu cedo, 8h–14h" maxlength="100" />
           </div>
         </div>
 
@@ -101,13 +108,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   let editingId: string | null = null;
   let currentFilter = '';
 
-  // Estado do calendário de folgas
+  // Estado do calendário
   let calMes = new Date().getMonth() + 1;
   let calAno = new Date().getFullYear();
   let diasSelecionados = new Set<string>(); // 'YYYY-MM-DD'
-  let modoEdicaoUnico = false; // true quando editando (só 1 dia)
+  let modoEdicaoUnico = false;
 
-  // ===== CALENDÁRIO DE FOLGAS =====
+  // ===== CALENDÁRIO =====
   function isoDate(ano: number, mes: number, dia: number) {
     return `${ano}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
   }
@@ -115,7 +122,6 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   function renderCalendario() {
     const grid = document.getElementById('fc-grid')!;
     const label = document.getElementById('cal-label')!;
-    const info = document.getElementById('dias-info')!;
 
     label.textContent = `${MESES[calMes]} ${calAno}`;
 
@@ -141,7 +147,6 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       cell.addEventListener('click', () => {
         const iso = cell.dataset.iso!;
         if (modoEdicaoUnico) {
-          // Edição: apenas um dia por vez
           diasSelecionados.clear();
           grid.querySelectorAll('.fc-day.selected').forEach(c => c.classList.remove('selected'));
           diasSelecionados.add(iso);
@@ -183,12 +188,24 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     renderCalendario();
   });
 
-  // ===== ALTERNAR MODO FOLGA / FÉRIAS =====
+  // ===== ALTERNAR MODO =====
   function setModo(tipo: string) {
     const mf = document.getElementById('modo-folga')!;
     const mv = document.getElementById('modo-ferias')!;
-    if (tipo === 'ferias') { mf.style.display = 'none'; mv.style.display = ''; }
-    else { mf.style.display = ''; mv.style.display = 'none'; }
+    const obsWrap = document.getElementById('observacao-wrap')!;
+    const calLabelTipo = document.getElementById('cal-label-tipo')!;
+
+    if (tipo === 'ferias') {
+      mf.style.display = 'none';
+      mv.style.display = '';
+      obsWrap.style.display = 'none';
+    } else {
+      mf.style.display = '';
+      mv.style.display = 'none';
+      const isHorario = tipo === 'horario';
+      obsWrap.style.display = isHorario ? '' : 'none';
+      calLabelTipo.textContent = isHorario ? 'Dias com mudança de horário *' : 'Dias de Folga *';
+    }
   }
 
   document.getElementById('tipo')?.addEventListener('change', (e) => {
@@ -213,20 +230,26 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const inicio = new Date(f.data_inicio + 'T00:00:00');
       const fim = new Date(f.data_fim + 'T00:00:00');
       const dias = Math.round((fim.getTime() - inicio.getTime()) / 86400000) + 1;
-      const badge = f.tipo === 'ferias' ? 'badge-info' : 'badge-warning';
-      const label = f.tipo === 'ferias' ? '🏖️ Férias' : '📋 Folga';
+      const { badge, label } = tipoMeta(f.tipo);
+      const obs = f.observacao ? escapeHtml(f.observacao) : '—';
       return `<tr>
         <td data-label="Funcionário"><strong>${escapeHtml(f.funcionarios?.nome ?? '—')}</strong></td>
         <td data-label="Tipo"><span class="badge ${badge}">${label}</span></td>
         <td data-label="Início">${formatDate(f.data_inicio)}</td>
         <td data-label="Fim">${formatDate(f.data_fim)}</td>
-        <td data-label="Dias">${dias} dia${dias > 1 ? 's' : ''}</td>
+        <td data-label="Observação" style="font-size:.85rem;color:var(--text-muted)">${obs}</td>
         <td data-label="Ações" class="cell-actions">
           <button class="btn btn-ghost btn-sm btn-icon" onclick="openEdit('${f.id}')" aria-label="Editar">✏️</button>
           <button class="btn btn-danger btn-sm btn-icon" onclick="deleteFolga('${f.id}')" aria-label="Excluir">🗑️</button>
         </td>
       </tr>`;
     }).join('');
+  }
+
+  function tipoMeta(tipo: string) {
+    if (tipo === 'ferias') return { badge: 'badge-info', label: '🏖️ Férias' };
+    if (tipo === 'horario') return { badge: 'badge-horario', label: '🕐 Horário' };
+    return { badge: 'badge-warning', label: '📋 Folga' };
   }
 
   function escapeHtml(s: string) {
@@ -255,6 +278,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   function closeModal() {
     document.getElementById('modal')!.style.display = 'none';
     (document.getElementById('form-error') as HTMLElement).style.display = 'none';
+    (document.getElementById('observacao') as HTMLInputElement).value = '';
     diasSelecionados.clear();
     editingId = null;
     modoEdicaoUnico = false;
@@ -267,11 +291,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     diasSelecionados.clear();
     modoEdicaoUnico = false;
     editingId = null;
-    document.getElementById('modal-title')!.textContent = 'Agendar Folga/Férias';
+    document.getElementById('modal-title')!.textContent = 'Agendar';
     (document.getElementById('funcionario_id') as HTMLSelectElement).value = '';
     (document.getElementById('tipo') as HTMLSelectElement).value = 'folga';
     (document.getElementById('data_inicio') as HTMLInputElement).value = '';
     (document.getElementById('data_fim') as HTMLInputElement).value = '';
+    (document.getElementById('observacao') as HTMLInputElement).value = '';
     setModo('folga');
     renderCalendario();
   }
@@ -287,13 +312,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     const { data } = await supabase.from('folgas').select('*').eq('id', id).single();
     if (!data) return;
     editingId = id;
-    document.getElementById('modal-title')!.textContent = 'Editar Folga/Férias';
+    document.getElementById('modal-title')!.textContent = 'Editar';
     (document.getElementById('funcionario_id') as HTMLSelectElement).value = data.funcionario_id;
     (document.getElementById('tipo') as HTMLSelectElement).value = data.tipo;
+    (document.getElementById('observacao') as HTMLInputElement).value = data.observacao ?? '';
     setModo(data.tipo);
 
-    if (data.tipo === 'folga') {
-      // Pré-seleciona o dia no calendário (modo edição = 1 dia)
+    if (data.tipo === 'folga' || data.tipo === 'horario') {
       modoEdicaoUnico = true;
       diasSelecionados.clear();
       diasSelecionados.add(data.data_inicio);
@@ -319,6 +344,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   document.getElementById('btn-save')?.addEventListener('click', async () => {
     const funcionario_id = (document.getElementById('funcionario_id') as HTMLSelectElement).value;
     const tipo = (document.getElementById('tipo') as HTMLSelectElement).value;
+    const observacao = (document.getElementById('observacao') as HTMLInputElement).value.trim() || null;
     const errorDiv = document.getElementById('form-error')!;
 
     if (!funcionario_id) {
@@ -326,9 +352,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       errorDiv.style.display = 'block'; return;
     }
 
-    if (tipo === 'folga') {
+    if (tipo === 'folga' || tipo === 'horario') {
       if (diasSelecionados.size === 0) {
-        errorDiv.textContent = 'Selecione pelo menos um dia de folga.';
+        errorDiv.textContent = 'Selecione pelo menos um dia.';
+        errorDiv.style.display = 'block'; return;
+      }
+      if (tipo === 'horario' && !observacao) {
+        errorDiv.textContent = 'Preencha o campo de horário/observação.';
         errorDiv.style.display = 'block'; return;
       }
       errorDiv.style.display = 'none';
@@ -336,20 +366,18 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const dias = Array.from(diasSelecionados).sort();
 
       if (editingId) {
-        // Edição: atualiza o único registro com o dia selecionado
         const dia = dias[0];
         const { error } = await supabase.from('folgas')
-          .update({ funcionario_id, tipo, data_inicio: dia, data_fim: dia })
+          .update({ funcionario_id, tipo, data_inicio: dia, data_fim: dia, observacao })
           .eq('id', editingId);
         if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
       } else {
-        // Criação: insere um registro por dia selecionado
-        const registros = dias.map(d => ({ funcionario_id, tipo, data_inicio: d, data_fim: d }));
+        const registros = dias.map(d => ({ funcionario_id, tipo, data_inicio: d, data_fim: d, observacao }));
         const { error } = await supabase.from('folgas').insert(registros);
         if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
       }
     } else {
-      // Férias: intervalo de datas
+      // Férias
       const data_inicio = (document.getElementById('data_inicio') as HTMLInputElement).value;
       const data_fim = (document.getElementById('data_fim') as HTMLInputElement).value;
       if (!data_inicio || !data_fim) {
@@ -362,7 +390,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       }
       errorDiv.style.display = 'none';
       const { error } = editingId
-        ? await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim }).eq('id', editingId)
+        ? await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim, observacao: null }).eq('id', editingId)
         : await supabase.from('folgas').insert({ funcionario_id, tipo, data_inicio, data_fim });
       if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
     }
@@ -388,7 +416,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 <style>
   .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-  /* Navegação do calendário de folgas */
+  .badge-horario {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+  }
+
+  /* Navegação do calendário */
   .fc-nav {
     display: flex;
     align-items: center;

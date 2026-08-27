@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS folgas (
   funcionario_id uuid NOT NULL REFERENCES funcionarios(id) ON DELETE CASCADE,
   data_inicio date NOT NULL,
   data_fim date NOT NULL,
-  tipo text NOT NULL CHECK (tipo IN ('folga', 'ferias')),
+  tipo text NOT NULL CHECK (tipo IN ('folga', 'ferias', 'horario')),
+  observacao text,
   created_at timestamptz DEFAULT now(),
   CONSTRAINT data_valida CHECK (data_fim >= data_inicio)
 );

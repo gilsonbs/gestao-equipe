@@ -149,6 +149,7 @@ const anoAtual = now.getFullYear();
           <button class="btn btn-ghost btn-sm filter-tipo active" data-tipo="">Todos</button>
           <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="folga">Folgas</button>
           <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="ferias">Férias</button>
+          <button class="btn btn-ghost btn-sm filter-tipo" data-tipo="horario">Horários</button>
         </div>
       </div>
       <div class="card-body" id="folgas-body">
@@ -689,10 +690,12 @@ const anoAtual = now.getFullYear();
       const gente = porDia.get(dia) ?? [];
       const temFerias = gente.some(g => g.tipo === 'ferias');
       const temFolga = gente.some(g => g.tipo === 'folga');
+      const temHorario = gente.some(g => g.tipo === 'horario');
       const classes = ['cal-dia'];
       if (gente.length) classes.push('ocupado');
       if (temFerias) classes.push('tem-ferias');
       if (temFolga) classes.push('tem-folga');
+      if (temHorario) classes.push('tem-horario');
       if (ehMesAtual && dia === diaHoje) classes.push('hoje');
 
       // Até 3 marcadores por dia; acima disso o "+N" evita estourar a célula
@@ -711,7 +714,10 @@ const anoAtual = now.getFullYear();
       ).join('') + (extras > 0 ? `<span class="cal-nome mais">+${extras}</span>` : '');
 
       const titulo = gente.length
-        ? `${dia}: ${gente.map(g => `${g.nome} (${g.tipo === 'ferias' ? 'férias' : 'folga'})`).join(', ')}`
+        ? `${dia}: ${gente.map(g => {
+            const t = g.tipo === 'ferias' ? 'férias' : g.tipo === 'horario' ? `horário${g.observacao ? ': ' + g.observacao : ''}` : 'folga';
+            return `${g.nome} (${t})`;
+          }).join(', ')}`
         : String(dia);
 
       // As duas formas são geradas sempre; o CSS escolhe qual mostrar
@@ -733,6 +739,7 @@ const anoAtual = now.getFullYear();
         <div class="cal-legenda">
           <span><span class="cal-ponto folga"></span> Folga</span>
           <span><span class="cal-ponto ferias"></span> Férias</span>
+          <span><span class="cal-ponto horario"></span> Horário</span>
         </div>
       </div>`;
   }
@@ -743,14 +750,20 @@ const anoAtual = now.getFullYear();
       const ini = new Date(f.data_inicio + 'T00:00:00');
       const fim = new Date(f.data_fim + 'T00:00:00');
       const dias = Math.round((fim.getTime() - ini.getTime()) / 86400000) + 1;
-      const ehFerias = f.tipo === 'ferias';
+      const { badge, rotulo } = f.tipo === 'ferias'
+        ? { badge: 'badge-info', rotulo: '🏖️ Férias' }
+        : f.tipo === 'horario'
+          ? { badge: 'badge-horario', rotulo: '🕐 Horário' }
+          : { badge: 'badge-warning', rotulo: '📋 Folga' };
+      const obsTexto = f.tipo === 'horario' && f.observacao
+        ? ` · <em>${escapeHtml(f.observacao)}</em>` : '';
       return `<li class="cal-lista-item">
         <span class="cal-ponto ${f.tipo}"></span>
         <span class="cal-lista-nome">${escapeHtml(f.funcionarios?.nome ?? '—')}</span>
         <span class="cal-lista-datas">
-          ${formatDate(f.data_inicio)} → ${formatDate(f.data_fim)} · ${dias} dia${dias > 1 ? 's' : ''}
+          ${formatDate(f.data_inicio)} → ${formatDate(f.data_fim)} · ${dias} dia${dias > 1 ? 's' : ''}${obsTexto}
         </span>
-        <span class="badge ${ehFerias ? 'badge-info' : 'badge-warning'}">${ehFerias ? 'Férias' : 'Folga'}</span>
+        <span class="badge ${badge}">${rotulo}</span>
       </li>`;
     }).join('') + '</ul>';
   }
