@@ -1,0 +1,237 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Reuniões" active="reunioes">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-4);flex-wrap:wrap;gap:var(--sp-2)">
+    <p style="color:var(--text-muted);font-size:.9rem;margin:0">Registre as pautas das reuniões para a equipe consultar no dashboard.</p>
+    <button class="btn btn-primary" id="btn-nova">+ Nova Reunião</button>
+  </div>
+
+  <div class="card">
+    <div class="card-body" style="padding:0">
+      <div class="table-wrap">
+        <table class="table-cards">
+          <thead>
+            <tr>
+              <th>Reunião</th>
+              <th>Data</th>
+              <th>Tópicos</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="4"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modal" style="display:none">
+    <div class="modal" style="max-width:540px">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Nova Reunião</span>
+        <button class="modal-close" id="modal-close" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="titulo">Título *</label>
+          <input class="form-control" id="titulo" required placeholder="Ex: Reunião mensal de equipe" maxlength="120" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="data">Data *</label>
+          <input class="form-control" type="date" id="data" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="descricao">Descrição / observações</label>
+          <textarea class="form-control" id="descricao" rows="3" placeholder="Observações gerais sobre a reunião (opcional)"></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Tópicos de Pauta</label>
+          <div id="topicos-lista" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:.5rem"></div>
+          <button class="btn btn-ghost btn-sm" id="btn-add-topico" type="button">+ Adicionar tópico</button>
+        </div>
+        <div id="form-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-4);margin-bottom:0"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { supabase } from '../../lib/supabase';
+
+  let editingId: string | null = null;
+
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
+  function formatData(d: string) {
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  }
+
+  // ===== CARREGAR LISTA =====
+  async function load() {
+    const tbody = document.getElementById('tbody')!;
+    const { data, error } = await supabase
+      .from('reunioes')
+      .select('*, reunioes_topicos(id, texto, ordem)')
+      .order('data', { ascending: false });
+
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="4"><div class="alert alert-danger" style="margin:var(--sp-4)">Erro: ${escapeHtml(error.message)}</div></td></tr>`;
+      return;
+    }
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4"><div class="empty"><div class="empty-icon">🗓️</div>Nenhuma reunião registrada</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.map((r: any) => {
+      const topicos = (r.reunioes_topicos ?? []).sort((a: any, b: any) => a.ordem - b.ordem);
+      const topicosHtml = topicos.length
+        ? `<ul style="margin:0;padding-left:1.2rem;font-size:.82rem;color:var(--text-muted)">${topicos.map((t: any) => `<li>${escapeHtml(t.texto)}</li>`).join('')}</ul>`
+        : '<span style="font-size:.82rem;color:var(--text-muted)">—</span>';
+      return `<tr>
+        <td data-label="Reunião" class="cell-block">
+          <div style="font-weight:600">${escapeHtml(r.titulo)}</div>
+          ${r.descricao ? `<div style="font-size:.8rem;color:var(--text-muted);margin-top:2px">${escapeHtml(r.descricao).slice(0,80)}${r.descricao.length>80?'…':''}</div>` : ''}
+        </td>
+        <td data-label="Data">${formatData(r.data)}</td>
+        <td data-label="Tópicos">${topicosHtml}</td>
+        <td data-label="Ações" class="cell-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="editReuniao('${r.id}')" aria-label="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm btn-icon" onclick="delReuniao('${r.id}')" aria-label="Excluir">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ===== TÓPICOS DINÂMICOS =====
+  function adicionarTopico(texto = '') {
+    const lista = document.getElementById('topicos-lista')!;
+    const idx = lista.children.length;
+    const div = document.createElement('div');
+    div.className = 'topico-row';
+    div.innerHTML = `
+      <input class="form-control topico-input" placeholder="Ex: Revisão de metas do mês" value="${escapeHtml(texto)}" data-idx="${idx}" style="flex:1" />
+      <button class="btn btn-ghost btn-sm btn-icon remover-topico" type="button" aria-label="Remover">✕</button>
+    `;
+    div.querySelector('.remover-topico')!.addEventListener('click', () => div.remove());
+    lista.appendChild(div);
+  }
+
+  function getTopicos(): string[] {
+    return Array.from(document.querySelectorAll<HTMLInputElement>('.topico-input'))
+      .map(el => el.value.trim())
+      .filter(Boolean);
+  }
+
+  // ===== MODAL =====
+  function openModal() { document.getElementById('modal')!.style.display = 'flex'; }
+
+  function closeModal() {
+    document.getElementById('modal')!.style.display = 'none';
+    document.getElementById('form-error')!.style.display = 'none';
+    (document.getElementById('titulo') as HTMLInputElement).value = '';
+    (document.getElementById('data') as HTMLInputElement).value = '';
+    (document.getElementById('descricao') as HTMLTextAreaElement).value = '';
+    document.getElementById('topicos-lista')!.innerHTML = '';
+    editingId = null;
+  }
+
+  function mostrarErro(msg: string) {
+    const el = document.getElementById('form-error')!;
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  document.getElementById('btn-nova')?.addEventListener('click', () => {
+    closeModal();
+    document.getElementById('modal-title')!.textContent = 'Nova Reunião';
+    document.getElementById('btn-save')!.textContent = 'Salvar';
+    openModal();
+  });
+  document.getElementById('modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+  document.getElementById('btn-add-topico')?.addEventListener('click', () => adicionarTopico());
+
+  // ===== EDITAR =====
+  (window as any).editReuniao = async (id: string) => {
+    const { data, error } = await supabase
+      .from('reunioes')
+      .select('*, reunioes_topicos(id, texto, ordem)')
+      .eq('id', id)
+      .single();
+    if (error || !data) { alert('Não foi possível carregar a reunião.'); return; }
+
+    editingId = id;
+    document.getElementById('modal-title')!.textContent = 'Editar Reunião';
+    document.getElementById('btn-save')!.textContent = 'Salvar';
+    (document.getElementById('titulo') as HTMLInputElement).value = data.titulo;
+    (document.getElementById('data') as HTMLInputElement).value = data.data;
+    (document.getElementById('descricao') as HTMLTextAreaElement).value = data.descricao ?? '';
+    document.getElementById('topicos-lista')!.innerHTML = '';
+    const topicos = (data.reunioes_topicos ?? []).sort((a: any, b: any) => a.ordem - b.ordem);
+    topicos.forEach((t: any) => adicionarTopico(t.texto));
+    openModal();
+  };
+
+  // ===== EXCLUIR =====
+  (window as any).delReuniao = async (id: string) => {
+    if (!confirm('Excluir esta reunião e seus tópicos?')) return;
+    const { error } = await supabase.from('reunioes').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    load();
+  };
+
+  // ===== SALVAR =====
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const titulo = (document.getElementById('titulo') as HTMLInputElement).value.trim();
+    const data = (document.getElementById('data') as HTMLInputElement).value;
+    const descricao = (document.getElementById('descricao') as HTMLTextAreaElement).value.trim() || null;
+    const topicos = getTopicos();
+
+    if (!titulo || !data) { mostrarErro('Título e data são obrigatórios.'); return; }
+    document.getElementById('form-error')!.style.display = 'none';
+
+    let reuniaoId = editingId;
+
+    if (editingId) {
+      const { error } = await supabase.from('reunioes').update({ titulo, data, descricao }).eq('id', editingId);
+      if (error) { mostrarErro('Erro ao salvar: ' + error.message); return; }
+      // Remove tópicos antigos
+      await supabase.from('reunioes_topicos').delete().eq('reuniao_id', editingId);
+    } else {
+      const { data: nova, error } = await supabase.from('reunioes').insert({ titulo, data, descricao }).select().single();
+      if (error || !nova) { mostrarErro('Erro ao criar reunião: ' + (error?.message ?? '')); return; }
+      reuniaoId = nova.id;
+    }
+
+    if (topicos.length > 0) {
+      const rows = topicos.map((texto, ordem) => ({ reuniao_id: reuniaoId!, texto, ordem }));
+      const { error } = await supabase.from('reunioes_topicos').insert(rows);
+      if (error) { mostrarErro('Reunião salva, mas erro ao salvar tópicos: ' + error.message); return; }
+    }
+
+    closeModal();
+    load();
+  });
+
+  load();
+</script>
+
+<style>
+  .topico-row {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+  }
+</style>
