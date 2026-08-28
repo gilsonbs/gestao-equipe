@@ -169,21 +169,26 @@ const anoAtual = now.getFullYear();
 
   <!-- Top Produtos -->
   <section class="card section">
-    <div class="card-header">
-      <span class="card-title">💊 Top Produtos</span>
-      <div class="prod-filtros">
-        <input class="form-control" id="busca-prod" placeholder="🔍 Nome ou substância..." />
-        <select class="form-control" id="prod-mes">
-          <option value="">Todos os meses</option>
-          {MESES.slice(1).map((m, i) => (
-            <option value={i + 1}>{m}</option>
-          ))}
-        </select>
+    <details id="prod-details">
+      <summary class="hist-summary">
+        <span class="card-title">💊 Top Produtos</span>
+        <span class="hist-chevron">▾</span>
+      </summary>
+      <div class="card-body" style="padding-top:var(--sp-3)">
+        <div class="prod-filtros" style="margin-bottom:var(--sp-3)">
+          <input class="form-control" id="busca-prod" placeholder="🔍 Nome ou substância..." />
+          <select class="form-control" id="prod-mes">
+            <option value="">Todos os meses</option>
+            {MESES.slice(1).map((m, i) => (
+              <option value={i + 1}>{m}</option>
+            ))}
+          </select>
+        </div>
+        <div id="produtos-body" style="padding:0">
+          <div class="loading"><div class="spinner"></div> Carregando...</div>
+        </div>
       </div>
-    </div>
-    <div class="card-body" id="produtos-body" style="padding:0">
-      <div class="loading"><div class="spinner"></div> Carregando...</div>
-    </div>
+    </details>
   </section>
 
   <!-- Histórico de avisos -->
@@ -646,7 +651,7 @@ const anoAtual = now.getFullYear();
       return;
     }
 
-    body.innerHTML = montarCalendario(data, mes, ano) + montarListaFolgas(data);
+    body.innerHTML = montarCalendario(data, mes, ano);
   }
 
   /**
@@ -1019,14 +1024,14 @@ const anoAtual = now.getFullYear();
       const descHtml = r.descricao
         ? `<div class="reuniao-desc">${escapeHtml(r.descricao).replace(/\n/g, '<br>')}</div>`
         : '';
-      return `<div class="reuniao-card">
-        <div class="reuniao-header">
+      const temConteudo = r.descricao || topicos.length > 0;
+      return `<details class="reuniao-card">
+        <summary class="reuniao-summary">
           <span class="reuniao-titulo">${escapeHtml(r.titulo)}</span>
-          <span class="reuniao-data">${dataFmt}</span>
-        </div>
-        ${descHtml}
-        ${topicosHtml}
-      </div>`;
+          <span class="reuniao-data">${dataFmt}${temConteudo ? ' <span class="reuniao-chevron">▾</span>' : ''}</span>
+        </summary>
+        ${temConteudo ? `<div class="reuniao-corpo">${descHtml}${topicosHtml}</div>` : ''}
+      </details>`;
     }).join('');
   }
 
@@ -1266,22 +1271,29 @@ const anoAtual = now.getFullYear();
 
   /* ========== REUNIÕES ========== */
   .reuniao-card {
-    padding: var(--sp-4);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     margin-bottom: var(--sp-3);
+    overflow: hidden;
   }
   .reuniao-card:last-child { margin-bottom: 0; }
-  .reuniao-header {
+  .reuniao-summary {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: center;
     gap: var(--sp-3);
-    flex-wrap: wrap;
-    margin-bottom: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
   }
-  .reuniao-titulo { font-weight: 700; font-size: .95rem; }
-  .reuniao-data { font-size: .8rem; color: var(--text-muted); white-space: nowrap; }
+  .reuniao-summary::-webkit-details-marker { display: none; }
+  .reuniao-summary:hover { background: var(--surface-hover); }
+  .reuniao-titulo { font-weight: 700; font-size: .95rem; flex: 1; }
+  .reuniao-data { font-size: .8rem; color: var(--text-muted); white-space: nowrap; display: flex; align-items: center; gap: .3rem; }
+  .reuniao-chevron { transition: transform .2s; display: inline-block; }
+  details[open] .reuniao-chevron { transform: rotate(180deg); }
+  .reuniao-corpo { padding: 0 var(--sp-4) var(--sp-4); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
   .reuniao-desc {
     font-size: .875rem;
     line-height: 1.65;
