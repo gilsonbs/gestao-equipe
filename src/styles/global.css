@@ -236,7 +236,7 @@ tbody tr:hover td { background: var(--slate-50); }
 .badge-danger  { background: var(--danger-soft);  color: var(--danger);  border-color: var(--danger-border); }
 .badge-info    { background: var(--info-soft);    color: var(--info);    border-color: var(--info-border); }
 .badge-neutral  { background: var(--slate-100);    color: var(--slate-600); border-color: var(--slate-200); }
-.badge-horario  { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.badge-horario  { background: #0f172a; color: #ffffff; border-color: #0f172a; }
 
 /* ---------- Barra de progresso ---------- */
 .progress {
@@ -552,7 +552,7 @@ tbody tr:hover td { background: var(--slate-50); }
 }
 .cal-nome.folga   { background: var(--warning-soft); color: var(--warning); border-left: 3px solid var(--warning); }
 .cal-nome.ferias  { background: var(--info-soft);    color: var(--info); border-left: 3px solid var(--info); }
-.cal-nome.horario { background: #fff7ed; color: #c2410c; border-left: 3px solid #ea580c; }
+.cal-nome.horario { background: #0f172a; color: #ffffff; border-left: 3px solid #000000; }
 .cal-nome-texto   { font-weight: 600; font-size: .68rem; }
 .cal-nome-tipo    { font-weight: 500; font-size: .62rem; opacity: .9; }
 .cal-nome-obs     { font-size: .62rem; font-style: italic; opacity: .95; word-break: break-word; }
@@ -582,16 +582,16 @@ tbody tr:hover td { background: var(--slate-50); }
 .cal-dia.ocupado { border-color: var(--slate-300); }
 .cal-dia.tem-folga   { background: var(--warning-soft); }
 .cal-dia.tem-ferias  { background: var(--info-soft); }
-.cal-dia.tem-horario { background: #fff7ed; }
+.cal-dia.tem-horario { background: #f1f5f9; }
 /* Dia com múltiplos tipos: gradiente para não escolher um vencedor */
 .cal-dia.tem-folga.tem-ferias {
   background: linear-gradient(135deg, var(--warning-soft) 50%, var(--info-soft) 50%);
 }
 .cal-dia.tem-folga.tem-horario {
-  background: linear-gradient(135deg, var(--warning-soft) 50%, #fff7ed 50%);
+  background: linear-gradient(135deg, var(--warning-soft) 50%, #f1f5f9 50%);
 }
 .cal-dia.tem-ferias.tem-horario {
-  background: linear-gradient(135deg, var(--info-soft) 50%, #fff7ed 50%);
+  background: linear-gradient(135deg, var(--info-soft) 50%, #f1f5f9 50%);
 }
 .cal-dia.ocupado .cal-num { color: var(--text); font-weight: 650; }
 
@@ -625,7 +625,7 @@ tbody tr:hover td { background: var(--slate-50); }
 }
 .cal-ponto.folga   { background: var(--warning); }
 .cal-ponto.ferias  { background: var(--info); }
-.cal-ponto.horario { background: #c2410c; }
+.cal-ponto.horario { background: #0f172a; }
 
 .cal-mais { font-size: .55rem; font-weight: 600; color: var(--text-muted); line-height: 1; }
 
