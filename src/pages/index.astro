@@ -713,37 +713,37 @@ const anoAtual = now.getFullYear();
       if (temHorario) classes.push('tem-horario');
       if (ehMesAtual && dia === diaHoje) classes.push('hoje');
 
-      // Até 3 marcadores por dia; acima disso o "+N" evita estourar a célula
-      const visiveis = gente.slice(0, 3);
-      const extras = gente.length - visiveis.length;
+      const tipoRotulo: Record<string, string> = {
+        folga: 'Folga',
+        ferias: 'Férias',
+        horario: 'Horário'
+      };
 
-      const pontos = visiveis
-        .map(g => `<span class="cal-ponto ${g.tipo}"></span>`).join('') +
-        (extras > 0 ? `<span class="cal-mais">+${extras}</span>` : '');
-
-      // Nome + sobrenome; para horário inclui a observação no chip.
-      const nomes = visiveis.map(g => {
+      // Exibir TODOS os agendamentos do dia diretamente com nome, tipo e observação (sem truncar nem ocultar)
+      const nomes = gente.map(g => {
         const nomeLabel = escapeHtml(nomeResumido(g.nome));
-        const obs = g.tipo === 'horario' && g.observacao ? ` · ${escapeHtml(g.observacao)}` : '';
-        return `<span class="cal-nome ${g.tipo}" title="${escapeHtml(g.nome)}${obs ? ' — ' + escapeHtml(g.observacao!) : ''}">${nomeLabel}${obs}</span>`;
-      }).join('') + (extras > 0 ? `<span class="cal-nome mais">+${extras}</span>` : '');
+        const rotulo = tipoRotulo[g.tipo] ?? g.tipo;
+        const obs = g.observacao ? ` · ${escapeHtml(g.observacao)}` : '';
+        const titleFull = `${escapeHtml(g.nome)} (${rotulo})${g.observacao ? ' — ' + escapeHtml(g.observacao) : ''}`;
+        return `<div class="cal-nome ${g.tipo}" title="${titleFull}">
+          <span class="cal-nome-texto">${nomeLabel} <span class="cal-nome-tipo">(${rotulo})</span></span>
+          ${obs ? `<span class="cal-nome-obs">${obs}</span>` : ''}
+        </div>`;
+      }).join('');
 
       const titulo = gente.length
         ? `${dia}: ${gente.map(g => {
-            const t = g.tipo === 'ferias' ? 'férias' : g.tipo === 'horario' ? `horário${g.observacao ? ': ' + g.observacao : ''}` : 'folga';
+            const t = g.tipo === 'ferias' ? 'férias' : g.tipo === 'horario' ? `horário${g.observacao ? ': ' + g.observacao : ''}` : `folga${g.observacao ? ': ' + g.observacao : ''}`;
             return `${g.nome} (${t})`;
           }).join(', ')}`
         : String(dia);
 
-      // As duas formas são geradas sempre; o CSS escolhe qual mostrar
-      // conforme a largura da tela.
       const dataInfo = gente.length
         ? ` data-dia="${dia}" data-info='${JSON.stringify(gente).replace(/'/g, '&#39;')}' role="button" tabindex="0" aria-label="${escapeHtml(titulo)}" style="cursor:pointer"`
         : '';
       return `<div class="${classes.join(' ')}" title="${escapeHtml(titulo)}"${dataInfo}>
         <span class="cal-num">${dia}</span>
-        <span class="cal-pontos">${pontos}</span>
-        <span class="cal-nomes">${nomes}</span>
+        <div class="cal-nomes">${nomes}</div>
       </div>`;
     }).join('');
 
