@@ -9,9 +9,68 @@ export type Funcionario = {
   id: string;
   nome: string;
   cargo: string | null;
+  contato?: string | null;
   data_nascimento: string | null;
+  carga_horaria_semanal?: number;
+  limite_diario?: number;
+  dias_indisponiveis?: number[];
+  observacoes_restricao?: string | null;
   ativo: boolean;
   created_at: string;
+};
+
+export type ModeloTurno = {
+  id: string;
+  nome: string;
+  hora_inicio: string;
+  hora_fim: string;
+  cor: string;
+  eh_folga: boolean;
+  ativo: boolean;
+  created_at?: string;
+};
+
+export type StatusTurno = 'scheduled' | 'confirmed' | 'completed' | 'swapped' | 'absent';
+
+export type EscalaTurno = {
+  id: string;
+  funcionario_id: string;
+  modelo_turno_id: string | null;
+  data: string;
+  observacao: string | null;
+  status: StatusTurno;
+  publicado: boolean;
+  created_at?: string;
+  modelos_turno?: ModeloTurno | null;
+  funcionarios?: { nome: string; cargo: string | null };
+};
+
+export type StatusTroca = 'pending' | 'approved' | 'rejected';
+
+export type TrocaTurno = {
+  id: string;
+  turno_origem_id: string;
+  solicitante_id: string;
+  alvo_funcionario_id: string;
+  turno_alvo_id: string | null;
+  motivo: string | null;
+  status: StatusTroca;
+  respondido_em: string | null;
+  created_at: string;
+  solicitante?: { nome: string; cargo: string | null };
+  alvo?: { nome: string; cargo: string | null };
+  turno_origem?: EscalaTurno;
+  turno_alvo?: EscalaTurno | null;
+};
+
+export type HistoricoEscala = {
+  id: string;
+  acao: string;
+  descricao: string;
+  funcionario_id: string | null;
+  data_referencia: string | null;
+  created_at: string;
+  funcionarios?: { nome: string } | null;
 };
 
 export type Meta = {
@@ -79,7 +138,8 @@ export type Folga = {
   funcionario_id: string;
   data_inicio: string;
   data_fim: string;
-  tipo: 'folga' | 'ferias';
+  tipo: 'folga' | 'ferias' | 'horario';
+  observacao?: string | null;
   funcionarios?: { nome: string };
 };
 
@@ -109,4 +169,5 @@ export type ProdutoTop = {
   mes: number | null;
   ano: number | null;
 };
+
 

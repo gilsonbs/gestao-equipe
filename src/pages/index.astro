@@ -103,6 +103,47 @@ const anoAtual = now.getFullYear();
     <div class="card-body" id="entregas-body"></div>
   </section>
 
+  <!-- ShiftHub: Matriz Visual de Escala Semanal & Plantão do Dia -->
+  <section class="card section" id="shifthub-public-section">
+    <div class="card-header">
+      <span class="card-title">🗓️ Escala Semanal & Plantão (ShiftHub)</span>
+      <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:center">
+        <button class="btn btn-ghost btn-sm" id="pub-btn-justificativa">📝 Justificativa / Atestado</button>
+        <button class="btn btn-primary btn-sm" id="pub-btn-troca">🔄 Solicitar Troca de Turno</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- Barra de Controle da Grade Pública -->
+      <div class="shifthub-topbar" style="margin-bottom:var(--sp-3);background:var(--slate-50)">
+        <div class="shifthub-week-nav" style="background:var(--surface)">
+          <button class="btn btn-ghost btn-sm" id="pub-prev-week" title="Semana Anterior">◀</button>
+          <span class="shifthub-week-label" id="pub-week-label">Carregando...</span>
+          <button class="btn btn-ghost btn-sm" id="pub-next-week" title="Próxima Semana">▶</button>
+          <button class="btn btn-ghost btn-sm" id="pub-today-week">Hoje</button>
+        </div>
+        <div class="shifthub-controls">
+          <select class="form-control" id="pub-sel-colab" style="width:auto;min-height:2.25rem;font-size:.825rem">
+            <option value="">👤 Todos os colaboradores</option>
+          </select>
+          <select class="form-control" id="pub-sel-cargo" style="width:auto;min-height:2.25rem;font-size:.825rem">
+            <option value="">Todos os cargos</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Resumo de Colegas no Plantão de Hoje -->
+      <div id="pub-hoje-banner" style="margin-bottom:var(--sp-3);display:none"></div>
+
+      <!-- Matriz Semanal -->
+      <div class="shifthub-matrix-wrap" id="pub-matrix-wrap">
+        <div class="loading"><div class="spinner"></div> Carregando escala semanal...</div>
+      </div>
+
+      <!-- Status das Solicitações de Troca Recentes -->
+      <div id="pub-swaps-status" style="margin-top:var(--sp-3);display:none"></div>
+    </div>
+  </section>
+
   <!-- Calendário de Folgas — largura total, uma posição acima das metas -->
   <div class="card section">
     <div class="card-header">
@@ -156,14 +197,26 @@ const anoAtual = now.getFullYear();
     </div>
   </div>
 
-  <!-- Vendas por Funcionário -->
-  <div class="card section">
-    <div class="card-header">
-      <span class="card-title">💰 Vendas por Funcionário</span>
-      <span id="vendas-periodo" style="font-size:.8rem;color:#64748b"></span>
+  <!-- Vendas por Funcionário & Ranking Colaborativo de Pontuação Operacional -->
+  <div class="grid-2 section">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">💰 Vendas por Funcionário</span>
+        <span id="vendas-periodo" style="font-size:.8rem;color:#64748b"></span>
+      </div>
+      <div class="card-body" id="vendas-body">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
     </div>
-    <div class="card-body" id="vendas-body">
-      <div class="loading"><div class="spinner"></div> Carregando...</div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🏆 Ranking Operacional & Atendimento</span>
+        <span id="ranking-periodo" style="font-size:.8rem;color:#64748b"></span>
+      </div>
+      <div class="card-body" id="ranking-body">
+        <div class="loading"><div class="spinner"></div> Carregando...</div>
+      </div>
     </div>
   </div>
 
@@ -217,9 +270,20 @@ const anoAtual = now.getFullYear();
 </main>
 
 <script>
-  import { supabase } from '../lib/supabase';
+  import { supabase, type Funcionario, type ModeloTurno, type EscalaTurno, type TrocaTurno } from '../lib/supabase';
   import { intervaloDoMes, formatarData } from '../lib/dates';
   import { renderMd } from '../lib/markdown';
+  import {
+    getMonday,
+    getWeekDays,
+    formatWeekRangeLabel,
+    formatTimeShort,
+    calcShiftHours,
+    validateWeekSchedule,
+    STATUS_TURNO_META,
+    toISODate,
+    type WeekDayInfo,
+  } from '../lib/shifthub';
 
   const MESES = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const MESES_SHORT = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -1035,15 +1099,432 @@ const anoAtual = now.getFullYear();
     }).join('');
   }
 
+  // ===== SHIFTHUB PÚBLICO (MATRIZ SEMANAL, COLEGAS DO DIA, TROCAS & JUSTIFICATIVAS) =====
+  let pubMonday = getMonday(new Date());
+  let pubWeekDays: WeekDayInfo[] = getWeekDays(pubMonday);
+  let pubFuncs: Funcionario[] = [];
+  let pubModelos: ModeloTurno[] = [];
+  let pubModelosMap = new Map<string, ModeloTurno>();
+  let pubTurnos: EscalaTurno[] = [];
+
+  async function loadPublicShiftHub() {
+    pubWeekDays = getWeekDays(pubMonday);
+    const labelEl = document.getElementById('pub-week-label');
+    if (labelEl) labelEl.textContent = formatWeekRangeLabel(pubWeekDays);
+
+    const prevSunday = new Date(pubMonday.getFullYear(), pubMonday.getMonth(), pubMonday.getDate() - 1);
+    const queryStart = toISODate(prevSunday);
+    const queryEnd = pubWeekDays[6].iso;
+
+    const [fRes, mRes, tRes, swRes] = await Promise.all([
+      supabase.from('funcionarios').select('*').eq('ativo', true).order('nome'),
+      supabase.from('modelos_turno').select('*').eq('ativo', true).order('eh_folga').order('hora_inicio'),
+      supabase.from('escala_turnos').select('*, modelos_turno(*)').gte('data', queryStart).lte('data', queryEnd),
+      supabase
+        .from('trocas_turno')
+        .select(`
+          *,
+          solicitante:funcionarios!trocas_turno_solicitante_id_fkey(nome),
+          alvo:funcionarios!trocas_turno_alvo_funcionario_id_fkey(nome),
+          turno_origem:escala_turnos!trocas_turno_turno_origem_id_fkey(data, modelos_turno(nome))
+        `)
+        .order('created_at', { ascending: false })
+        .limit(6),
+    ]);
+
+    const wrap = document.getElementById('pub-matrix-wrap')!;
+    if (mRes.error || tRes.error) {
+      wrap.innerHTML = `<div class="empty"><div class="empty-icon">🗓️</div>Escala semanal em configuração pelo gestor.</div>`;
+      return;
+    }
+
+    pubFuncs = (fRes.data ?? []) as Funcionario[];
+    pubModelos = (mRes.data ?? []) as ModeloTurno[];
+    pubModelosMap = new Map(pubModelos.map(m => [m.id, m]));
+    pubTurnos = (tRes.data ?? []) as EscalaTurno[];
+
+    // Popular seletores de colaborador e cargo
+    const selColab = document.getElementById('pub-sel-colab') as HTMLSelectElement;
+    const prevColab = selColab.value;
+    selColab.innerHTML = `<option value="">👤 Todos os colaboradores</option>` +
+      pubFuncs.map(f => `<option value="${f.id}">${escapeHtml(f.nome)}</option>`).join('');
+    selColab.value = prevColab;
+
+    const selCargo = document.getElementById('pub-sel-cargo') as HTMLSelectElement;
+    const prevCargo = selCargo.value;
+    const cargos = Array.from(new Set(pubFuncs.map(f => (f.cargo ?? '').trim()).filter(Boolean))).sort();
+    selCargo.innerHTML = `<option value="">Todos os cargos</option>` +
+      cargos.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    selCargo.value = prevCargo;
+
+    renderPublicMatrix();
+    renderPublicSwaps((swRes.data ?? []) as TrocaTurno[]);
+  }
+
+  function renderPublicMatrix() {
+    const wrap = document.getElementById('pub-matrix-wrap')!;
+    const hojeBanner = document.getElementById('pub-hoje-banner')!;
+    const colabId = (document.getElementById('pub-sel-colab') as HTMLSelectElement).value;
+    const cargoFilter = (document.getElementById('pub-sel-cargo') as HTMLSelectElement).value;
+
+    const visibleFuncs = cargoFilter
+      ? pubFuncs.filter(f => (f.cargo ?? '').trim() === cargoFilter)
+      : pubFuncs;
+
+    const validation = validateWeekSchedule(pubFuncs, pubTurnos, pubModelosMap, pubWeekDays);
+    const cellMap = new Map<string, EscalaTurno>();
+    for (const t of pubTurnos) {
+      cellMap.set(`${t.funcionario_id}_${t.data}`, t);
+    }
+
+    // Banner "Colegas de Plantão Hoje"
+    const hojeIso = toISODate(new Date());
+    const turnosHoje = pubTurnos.filter(t => {
+      if (t.data !== hojeIso || t.status === 'absent') return false;
+      const mod = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+      return mod && !mod.eh_folga;
+    });
+
+    if (turnosHoje.length > 0) {
+      const fMap = new Map(pubFuncs.map(f => [f.id, f]));
+      const chips = turnosHoje.map(t => {
+        const f = fMap.get(t.funcionario_id);
+        const mod = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+        return `<span class="badge" style="background:${escapeHtml(mod?.cor ?? '#4f46e5')}18;color:var(--slate-800);border-color:${escapeHtml(mod?.cor ?? '#4f46e5')}55">
+          <span style="width:7px;height:7px;border-radius:50%;background:${escapeHtml(mod?.cor ?? '#4f46e5')}"></span>
+          <strong>${escapeHtml(f?.nome ?? '—')}</strong> · ${escapeHtml(mod?.nome ?? '')} (${formatTimeShort(mod?.hora_inicio)}-${formatTimeShort(mod?.hora_fim)})
+        </span>`;
+      }).join(' ');
+      hojeBanner.innerHTML = `<div style="padding:var(--sp-2) var(--sp-3);background:var(--slate-50);border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;font-size:.8rem">
+        <strong style="color:var(--slate-700)">🟢 No plantão hoje (${formatarData(hojeIso).slice(0,5)}):</strong>
+        ${chips}
+      </div>`;
+      hojeBanner.style.display = 'block';
+    } else {
+      hojeBanner.style.display = 'none';
+    }
+
+    if (visibleFuncs.length === 0) {
+      wrap.innerHTML = `<div class="empty"><div class="empty-icon">👥</div>Nenhum colaborador encontrado.</div>`;
+      return;
+    }
+
+    const headCols = pubWeekDays.map(d => {
+      const workingCount = pubFuncs.filter(f => {
+        const t = cellMap.get(`${f.id}_${d.iso}`);
+        if (!t || t.status === 'absent') return false;
+        const mod = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+        return mod && !mod.eh_folga;
+      }).length;
+      return `<th>
+        <div class="shifthub-day-head ${d.isToday ? 'is-today' : ''}">
+          <span class="shifthub-day-dow">${d.dowShort}</span>
+          <span class="shifthub-day-num">${String(d.dayNum).padStart(2, '0')}/${String(d.monthNum).padStart(2, '0')}</span>
+          <span class="shifthub-day-coverage ${workingCount > 0 ? 'cov-ok' : ''}">👥 ${workingCount}</span>
+        </div>
+      </th>`;
+    }).join('');
+
+    const rowsHtml = visibleFuncs.map(func => {
+      const isSelected = colabId === func.id;
+      const horasAlocadas = validation.horasPorFuncionario.get(func.id) ?? 0;
+      const limiteSemanal = func.carga_horaria_semanal ?? 44;
+
+      const cellsHtml = pubWeekDays.map(d => {
+        const key = `${func.id}_${d.iso}`;
+        const turno = cellMap.get(key);
+        if (!turno) {
+          return `<td class="shifthub-cell ${d.isToday ? 'is-today' : ''}">
+            <div style="height:100%;min-height:60px;display:flex;align-items:center;justify-content:center;color:var(--slate-300);font-size:.75rem">—</div>
+          </td>`;
+        }
+
+        const mod = turno.modelos_turno ?? (turno.modelo_turno_id ? pubModelosMap.get(turno.modelo_turno_id) : null);
+        const cor = mod?.cor ?? '#64748b';
+        const ehFolga = Boolean(mod?.eh_folga);
+        const nomeTurno = mod?.nome ?? 'Turno';
+        const horarioTxt = ehFolga
+          ? 'FOLGA'
+          : mod
+            ? `${formatTimeShort(mod.hora_inicio)} – ${formatTimeShort(mod.hora_fim)}`
+            : '';
+        const stMeta = STATUS_TURNO_META[turno.status] ?? STATUS_TURNO_META.scheduled;
+
+        const slotClasses = ['shifthub-slot'];
+        if (ehFolga) slotClasses.push('is-folga');
+        if (turno.status === 'absent') slotClasses.push('is-absent');
+
+        return `<td class="shifthub-cell ${d.isToday ? 'is-today' : ''}"
+                    data-pub-shift-id="${turno.id}">
+          <div class="${slotClasses.join(' ')}" style="border-left-color:${escapeHtml(cor)}">
+            <div>
+              <div class="shifthub-slot-top">
+                <span class="shifthub-slot-name">${escapeHtml(nomeTurno)}</span>
+              </div>
+              <div class="shifthub-slot-time">${escapeHtml(horarioTxt)}</div>
+              ${turno.observacao ? `<div style="font-size:.64rem;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">💬 ${escapeHtml(turno.observacao)}</div>` : ''}
+            </div>
+            <div class="shifthub-slot-bottom">
+              <span class="shifthub-slot-status st-${turno.status}">${stMeta.icon} ${stMeta.shortLabel}</span>
+            </div>
+          </div>
+        </td>`;
+      }).join('');
+
+      return `<tr class="${isSelected ? 'row-highlight' : ''}">
+        <td class="col-colab">
+          <div class="shifthub-colab-name"><span>${escapeHtml(func.nome)}</span></div>
+          <div class="shifthub-colab-role">${escapeHtml(func.cargo ?? '')} · ${horasAlocadas}h/${limiteSemanal}h</div>
+        </td>
+        ${cellsHtml}
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<table class="shifthub-matrix" role="grid" aria-label="Escala Semanal da Equipe">
+      <thead>
+        <tr>
+          <th class="col-colab">Colaborador</th>
+          ${headCols}
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>`;
+
+    wrap.querySelectorAll<HTMLElement>('[data-pub-shift-id]').forEach(cell => {
+      cell.addEventListener('click', () => {
+        const shiftId = cell.dataset.pubShiftId!;
+        openPubShiftDetail(shiftId);
+      });
+    });
+  }
+
+  function renderPublicSwaps(swaps: TrocaTurno[]) {
+    const el = document.getElementById('pub-swaps-status')!;
+    if (!swaps || swaps.length === 0) {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = 'block';
+    el.innerHTML = `<div style="font-size:.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">
+      🔄 Solicitações de Troca Recentes
+    </div>
+    <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap">
+      ${swaps.map(s => {
+        const badge = s.status === 'pending'
+          ? '<span class="badge badge-warning">⏳ Pendente</span>'
+          : s.status === 'approved'
+            ? '<span class="badge badge-success">✓ Aprovada</span>'
+            : '<span class="badge badge-neutral">✕ Recusada</span>';
+        const dataStr = s.turno_origem?.data ? formatarData(s.turno_origem.data).slice(0,5) : '';
+        return `<div style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.78rem;display:inline-flex;align-items:center;gap:6px;background:var(--surface)">
+          ${badge}
+          <span><strong>${escapeHtml(s.solicitante?.nome ?? '—')}</strong> ↔ <strong>${escapeHtml(s.alvo?.nome ?? '—')}</strong> (${dataStr})</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  function openPubShiftDetail(shiftId: string) {
+    const turno = pubTurnos.find(t => t.id === shiftId);
+    if (!turno) return;
+    const func = pubFuncs.find(f => f.id === turno.funcionario_id);
+    const mod = turno.modelos_turno ?? (turno.modelo_turno_id ? pubModelosMap.get(turno.modelo_turno_id) : null);
+    const colegasNoDia = pubTurnos.filter(t => {
+      if (t.data !== turno.data || t.id === turno.id || t.status === 'absent') return false;
+      const m = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+      return m && !m.eh_folga;
+    });
+
+    const fMap = new Map(pubFuncs.map(f => [f.id, f]));
+    const colegasHtml = colegasNoDia.length > 0
+      ? colegasNoDia.map(c => {
+          const cf = fMap.get(c.funcionario_id);
+          const cm = c.modelos_turno ?? (c.modelo_turno_id ? pubModelosMap.get(c.modelo_turno_id) : null);
+          return `<li><strong>${escapeHtml(cf?.nome ?? '—')}</strong> — ${escapeHtml(cm?.nome ?? '')} (${formatTimeShort(cm?.hora_inicio)}-${formatTimeShort(cm?.hora_fim)})</li>`;
+        }).join('')
+      : '<li>Nenhum outro colega escalado neste dia.</li>';
+
+    const body = document.getElementById('modal-pub-cell-body')!;
+    body.innerHTML = `
+      <div style="margin-bottom:var(--sp-3)">
+        <div style="font-size:1.05rem;font-weight:700">${escapeHtml(func?.nome ?? 'Colaborador')}</div>
+        <div style="font-size:.82rem;color:var(--text-muted)">${escapeHtml(func?.cargo ?? '')} · Data: <strong>${formatarData(turno.data)}</strong></div>
+      </div>
+      <div style="padding:var(--sp-3);background:var(--slate-50);border-radius:var(--radius-sm);border-left:4px solid ${escapeHtml(mod?.cor ?? '#4f46e5')};margin-bottom:var(--sp-3)">
+        <div style="font-weight:700">${escapeHtml(mod?.nome ?? 'Turno')}</div>
+        <div style="font-size:.85rem;color:var(--slate-600)">
+          ${mod?.eh_folga ? 'FOLGA' : `${formatTimeShort(mod?.hora_inicio)} às ${formatTimeShort(mod?.hora_fim)} (${calcShiftHours(mod)}h)`}
+        </div>
+        ${turno.observacao ? `<div style="font-size:.8rem;margin-top:4px;color:var(--slate-700)">💬 ${escapeHtml(turno.observacao)}</div>` : ''}
+      </div>
+      <div style="font-size:.8rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px">Colegas de Plantão no Dia</div>
+      <ul style="font-size:.85rem;padding-left:1.2rem;margin-bottom:var(--sp-4);color:var(--slate-700)">${colegasHtml}</ul>
+      <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" id="btn-cell-troca">🔄 Propor Troca deste Turno</button>
+        <button class="btn btn-ghost btn-sm" id="btn-cell-just">📝 Registrar Justificativa / Atestado</button>
+      </div>
+    `;
+
+    document.getElementById('modal-pub-cell')!.style.display = 'flex';
+    document.getElementById('btn-cell-troca')?.addEventListener('click', () => {
+      document.getElementById('modal-pub-cell')!.style.display = 'none';
+      openPublicSwapModal(turno.id);
+    });
+    document.getElementById('btn-cell-just')?.addEventListener('click', () => {
+      document.getElementById('modal-pub-cell')!.style.display = 'none';
+      openPublicJustModal(turno.id);
+    });
+  }
+
+  function openPublicSwapModal(preselectedShiftId?: string) {
+    const origemSel = document.getElementById('pub-swap-origem') as HTMLSelectElement;
+    const alvoFuncSel = document.getElementById('pub-swap-alvo-func') as HTMLSelectElement;
+    const alvoShiftSel = document.getElementById('pub-swap-alvo-shift') as HTMLSelectElement;
+
+    const workingShifts = pubTurnos.filter(t => {
+      const m = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+      return m && !m.eh_folga;
+    });
+
+    if (workingShifts.length === 0) {
+      alert('Nenhum turno de trabalho alocado nesta semana para solicitar troca.');
+      return;
+    }
+
+    const fMap = new Map(pubFuncs.map(f => [f.id, f]));
+    origemSel.innerHTML = workingShifts.map(t => {
+      const f = fMap.get(t.funcionario_id);
+      const m = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+      return `<option value="${t.id}" data-func-id="${t.funcionario_id}">${escapeHtml(f?.nome ?? '—')} — ${formatarData(t.data)} (${escapeHtml(m?.nome ?? 'Turno')})</option>`;
+    }).join('');
+
+    if (preselectedShiftId) origemSel.value = preselectedShiftId;
+
+    alvoFuncSel.innerHTML = pubFuncs
+      .map(f => `<option value="${f.id}">${escapeHtml(f.nome)} (${escapeHtml(f.cargo ?? '—')})</option>`)
+      .join('');
+
+    const syncTargetShifts = () => {
+      const targetId = alvoFuncSel.value;
+      const list = pubTurnos.filter(t => t.funcionario_id === targetId);
+      alvoShiftSel.innerHTML = `<option value="">Apenas cobertura / assumir este turno</option>` +
+        list.map(t => {
+          const m = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+          return `<option value="${t.id}">${formatarData(t.data)} — ${escapeHtml(m?.nome ?? 'Turno')}</option>`;
+        }).join('');
+    };
+    alvoFuncSel.onchange = syncTargetShifts;
+    syncTargetShifts();
+
+    (document.getElementById('pub-swap-motivo') as HTMLTextAreaElement).value = '';
+    document.getElementById('pub-swap-error')!.style.display = 'none';
+    document.getElementById('modal-pub-swap')!.style.display = 'flex';
+  }
+
+  function openPublicJustModal(preselectedShiftId?: string) {
+    const sel = document.getElementById('pub-just-shift') as HTMLSelectElement;
+    if (pubTurnos.length === 0) {
+      alert('Nenhum turno alocado nesta semana.');
+      return;
+    }
+    const fMap = new Map(pubFuncs.map(f => [f.id, f]));
+    sel.innerHTML = pubTurnos.map(t => {
+      const f = fMap.get(t.funcionario_id);
+      const m = t.modelos_turno ?? (t.modelo_turno_id ? pubModelosMap.get(t.modelo_turno_id) : null);
+      return `<option value="${t.id}">${escapeHtml(f?.nome ?? '—')} — ${formatarData(t.data)} (${escapeHtml(m?.nome ?? 'Turno')})</option>`;
+    }).join('');
+    if (preselectedShiftId) sel.value = preselectedShiftId;
+    (document.getElementById('pub-just-texto') as HTMLTextAreaElement).value = '';
+    document.getElementById('pub-just-error')!.style.display = 'none';
+    document.getElementById('modal-pub-just')!.style.display = 'flex';
+  }
+
+  document.getElementById('pub-prev-week')?.addEventListener('click', () => {
+    pubMonday = new Date(pubMonday.getFullYear(), pubMonday.getMonth(), pubMonday.getDate() - 7);
+    loadPublicShiftHub();
+  });
+  document.getElementById('pub-next-week')?.addEventListener('click', () => {
+    pubMonday = new Date(pubMonday.getFullYear(), pubMonday.getMonth(), pubMonday.getDate() + 7);
+    loadPublicShiftHub();
+  });
+  document.getElementById('pub-today-week')?.addEventListener('click', () => {
+    pubMonday = getMonday(new Date());
+    loadPublicShiftHub();
+  });
+  document.getElementById('pub-sel-colab')?.addEventListener('change', renderPublicMatrix);
+  document.getElementById('pub-sel-cargo')?.addEventListener('change', renderPublicMatrix);
+  document.getElementById('pub-btn-troca')?.addEventListener('click', () => openPublicSwapModal());
+  document.getElementById('pub-btn-justificativa')?.addEventListener('click', () => openPublicJustModal());
+
+  // ===== PAINEL DE DESEMPENHO & RANKING OPERACIONAL (ITEM 3.D) =====
+  async function loadOperationalRanking() {
+    const mes = getMes(); const ano = getAno();
+    document.getElementById('ranking-periodo')!.textContent = `${MESES[mes]} ${ano}`;
+    const body = document.getElementById('ranking-body')!;
+
+    const { data, error } = await supabase
+      .from('desempenho_mensal')
+      .select('*')
+      .eq('mes', mes)
+      .eq('ano', ano);
+
+    if (error || !data || data.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">🏆</div>Sem dados de desempenho no período</div>';
+      return;
+    }
+
+    // Pontuação Operacional Colaborativa:
+    // Combina % da meta (peso principal) + bônus por volume de atendimentos + vendas realizadas
+    const ranked = data
+      .filter((d: any) => Number(d.valor_realizado) > 0 || Number(d.valor_meta) > 0)
+      .map((d: any) => {
+        const pct = Number(d.percentual ?? 0);
+        const atend = Number(d.num_atendimentos ?? 0);
+        const ticket = Number(d.ticket_medio ?? 0);
+        const score = Math.round(pct * 10 + atend * 1.5 + (Number(d.valor_realizado ?? 0) / 500));
+        return { ...d, pct, atend, ticket, score };
+      })
+      .sort((a: any, b: any) => b.score - a.score);
+
+    if (ranked.length === 0) {
+      body.innerHTML = '<div class="empty"><div class="empty-icon">🏆</div>Nenhum indicador operacional lançado</div>';
+      return;
+    }
+
+    const medals = ['🥇', '🥈', '🥉'];
+    body.innerHTML = `<div class="ranking-list">${ranked.map((r: any, idx: number) => {
+      const topClass = idx === 0 ? 'top-1' : idx === 1 ? 'top-2' : idx === 2 ? 'top-3' : '';
+      const posLabel = medals[idx] ?? `${idx + 1}º`;
+      return `<div class="ranking-item ${topClass}">
+        <div class="ranking-pos">${posLabel}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:650;font-size:.9rem">${escapeHtml(r.nome ?? '—')}</div>
+          <div style="font-size:.75rem;color:var(--text-muted)">
+            ${r.cargo ? `${escapeHtml(r.cargo)} · ` : ''}
+            Meta: <strong>${r.pct}%</strong>
+            ${r.atend > 0 ? ` · <strong>${r.atend}</strong> atend.` : ''}
+            ${r.ticket > 0 ? ` · Ticket R$ ${r.ticket.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}
+          </div>
+        </div>
+        <div>
+          <div class="ranking-score">${r.score} pts</div>
+          <div style="font-size:.68rem;color:var(--text-muted);text-align:right">Score Op.</div>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
   // ===== LOAD ALL =====
   function loadAll() {
-    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadProdutos(); loadEscalas(); loadEntregas(); loadReunioes();
+    loadAvisos(); loadStats(); loadMetas(); loadAniversarios(); loadFolgas(); loadVendas(); loadOperationalRanking(); loadProdutos(); loadEscalas(); loadEntregas(); loadReunioes(); loadPublicShiftHub();
   }
 
   selMes.addEventListener('change', () => {
-    loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadAniversarios(); loadEntregas();
+    loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadOperationalRanking(); loadAniversarios(); loadEntregas();
   });
-  selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadEntregas(); });
+  selAno.addEventListener('change', () => { loadStats(); loadMetas(); loadFolgas(); loadVendas(); loadOperationalRanking(); loadEntregas(); });
 
   loadAll();
 
@@ -1109,6 +1590,106 @@ const anoAtual = now.getFullYear();
     const dia = parseInt(cel.dataset.dia!);
     const gente = JSON.parse(cel.dataset.info!);
     abrirModalDia(dia, gente, getMes(), getAno());
+  });
+
+  // ===== HANDLERS DOS MODAIS PÚBLICOS SHIFTHUB =====
+  document.getElementById('close-pub-cell')?.addEventListener('click', () => {
+    document.getElementById('modal-pub-cell')!.style.display = 'none';
+  });
+  document.getElementById('close-pub-swap')?.addEventListener('click', () => {
+    document.getElementById('modal-pub-swap')!.style.display = 'none';
+  });
+  document.getElementById('cancel-pub-swap')?.addEventListener('click', () => {
+    document.getElementById('modal-pub-swap')!.style.display = 'none';
+  });
+  document.getElementById('close-pub-just')?.addEventListener('click', () => {
+    document.getElementById('modal-pub-just')!.style.display = 'none';
+  });
+  document.getElementById('cancel-pub-just')?.addEventListener('click', () => {
+    document.getElementById('modal-pub-just')!.style.display = 'none';
+  });
+
+  document.getElementById('save-pub-swap')?.addEventListener('click', async () => {
+    const origemSel = document.getElementById('pub-swap-origem') as HTMLSelectElement;
+    const turno_origem_id = origemSel.value;
+    const solicitante_id = origemSel.selectedOptions[0]?.dataset.funcId ?? '';
+    const alvo_funcionario_id = (document.getElementById('pub-swap-alvo-func') as HTMLSelectElement).value;
+    const turno_alvo_id = (document.getElementById('pub-swap-alvo-shift') as HTMLSelectElement).value || null;
+    const motivo = (document.getElementById('pub-swap-motivo') as HTMLTextAreaElement).value.trim() || null;
+    const errEl = document.getElementById('pub-swap-error')!;
+
+    if (!turno_origem_id || !alvo_funcionario_id || solicitante_id === alvo_funcionario_id) {
+      errEl.textContent = 'Selecione um colega substituto diferente do solicitante.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const { error } = await supabase.from('trocas_turno').insert({
+      turno_origem_id,
+      solicitante_id,
+      alvo_funcionario_id,
+      turno_alvo_id,
+      motivo,
+      status: 'pending',
+    });
+
+    if (error) {
+      errEl.textContent = 'Não foi possível enviar solicitação: ' + error.message;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const fSol = pubFuncs.find(f => f.id === solicitante_id);
+    const fAlvo = pubFuncs.find(f => f.id === alvo_funcionario_id);
+    await supabase.from('historico_escala').insert({
+      acao: 'troca_solicitada',
+      descricao: `${fSol?.nome ?? 'Colaborador'} solicitou troca de turno com ${fAlvo?.nome ?? 'Colega'}`,
+      funcionario_id: solicitante_id,
+    });
+
+    document.getElementById('modal-pub-swap')!.style.display = 'none';
+    alert('Solicitação de troca enviada com sucesso! O gestor aprovará no painel administrativo.');
+    await loadPublicShiftHub();
+  });
+
+  document.getElementById('save-pub-just')?.addEventListener('click', async () => {
+    const shiftId = (document.getElementById('pub-just-shift') as HTMLSelectElement).value;
+    const tipo = (document.getElementById('pub-just-tipo') as HTMLSelectElement).value;
+    const texto = (document.getElementById('pub-just-texto') as HTMLTextAreaElement).value.trim();
+    const errEl = document.getElementById('pub-just-error')!;
+
+    if (!shiftId || !texto) {
+      errEl.textContent = 'Descreva o motivo da justificativa ou atestado.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const turno = pubTurnos.find(t => t.id === shiftId);
+    const novaObs = `[${tipo}] ${texto}`;
+    const novoStatus = tipo === 'Atestado / Falta Justificada' ? 'absent' : (turno?.status ?? 'scheduled');
+
+    const { error } = await supabase
+      .from('escala_turnos')
+      .update({ observacao: novaObs, status: novoStatus })
+      .eq('id', shiftId);
+
+    if (error) {
+      errEl.textContent = 'Erro ao registrar justificativa: ' + error.message;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const func = pubFuncs.find(f => f.id === turno?.funcionario_id);
+    await supabase.from('historico_escala').insert({
+      acao: 'justificativa',
+      descricao: `${func?.nome ?? 'Colaborador'} registrou ${tipo} para o dia ${turno ? formatarData(turno.data) : ''}: "${texto}"`,
+      funcionario_id: turno?.funcionario_id ?? null,
+      data_referencia: turno?.data ?? null,
+    });
+
+    document.getElementById('modal-pub-just')!.style.display = 'none';
+    alert('Justificativa registrada na escala!');
+    await loadPublicShiftHub();
   });
 </script>
 
@@ -1381,6 +1962,85 @@ const anoAtual = now.getFullYear();
       <button id="modal-dia-fechar" aria-label="Fechar">✕</button>
     </div>
     <div id="modal-dia-body"></div>
+  </div>
+</div>
+
+<!-- Modal Detalhe do Turno na Matriz (ShiftHub Público) -->
+<div class="modal-backdrop" id="modal-pub-cell" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🗓️ Detalhes do Turno & Plantão</span>
+      <button class="modal-close" id="close-pub-cell">✕</button>
+    </div>
+    <div class="modal-body" id="modal-pub-cell-body"></div>
+  </div>
+</div>
+
+<!-- Modal Solicitar Troca de Turno (Colaborador) -->
+<div class="modal-backdrop" id="modal-pub-swap" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🔄 Solicitar Troca de Turno</span>
+      <button class="modal-close" id="close-pub-swap">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Seu Turno (Solicitante) *</label>
+        <select class="form-control" id="pub-swap-origem"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Colega com quem deseja trocar *</label>
+        <select class="form-control" id="pub-swap-alvo-func"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Turno do Colega para Permuta (Opcional)</label>
+        <select class="form-control" id="pub-swap-alvo-shift">
+          <option value="">Apenas cobertura / assumir este turno</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Motivo / Observação</label>
+        <textarea class="form-control" id="pub-swap-motivo" rows="2" placeholder="Ex: Consulta médica, troca combinada previamente com o colega..."></textarea>
+      </div>
+      <div id="pub-swap-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-3);margin-bottom:0"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancel-pub-swap">Cancelar</button>
+      <button class="btn btn-primary" id="save-pub-swap">Enviar Solicitação</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Registrar Justificativa / Atestado (Colaborador) -->
+<div class="modal-backdrop" id="modal-pub-just" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📝 Registrar Justificativa / Atestado</span>
+      <button class="modal-close" id="close-pub-just">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Selecione o Turno *</label>
+        <select class="form-control" id="pub-just-shift"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de Registro</label>
+        <select class="form-control" id="pub-just-tipo">
+          <option value="Justificativa de Horário">Justificativa de Horário / Atraso</option>
+          <option value="Atestado / Falta Justificada">Atestado Médico / Falta Justificada</option>
+          <option value="Observação de Plantão">Observação de Plantão</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Descrição / Justificativa *</label>
+        <textarea class="form-control" id="pub-just-texto" rows="3" placeholder="Informe os detalhes ou número/período do atestado..."></textarea>
+      </div>
+      <div id="pub-just-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-3);margin-bottom:0"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancel-pub-just">Cancelar</button>
+      <button class="btn btn-primary" id="save-pub-just">Salvar Registro</button>
+    </div>
   </div>
 </div>
 </body>

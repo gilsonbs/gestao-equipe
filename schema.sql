@@ -14,7 +14,12 @@ CREATE TABLE IF NOT EXISTS funcionarios (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   nome text NOT NULL,
   cargo text,
+  contato text,
   data_nascimento date,
+  carga_horaria_semanal integer NOT NULL DEFAULT 44,
+  limite_diario integer NOT NULL DEFAULT 8,
+  dias_indisponiveis integer[] NOT NULL DEFAULT '{}',
+  observacoes_restricao text,
   ativo boolean DEFAULT true,
   created_at timestamptz DEFAULT now()
 );
@@ -289,3 +294,103 @@ CREATE INDEX IF NOT EXISTS idx_produtos_top_substancia    ON produtos_top(substa
 CREATE INDEX IF NOT EXISTS idx_funcionarios_ativo         ON funcionarios(ativo);
 CREATE INDEX IF NOT EXISTS idx_avisos_ordem                ON avisos(fixado DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_avisos_expiracao            ON avisos(data_expiracao);
+
+-- =============================================
+-- ShiftHub: Gestão de Turnos, Matriz Semanal, Trocas e Auditoria
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS modelos_turno (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  nome text NOT NULL,
+  hora_inicio time NOT NULL DEFAULT '07:00',
+  hora_fim time NOT NULL DEFAULT '15:00',
+  cor text NOT NULL DEFAULT '#0284c7',
+  eh_folga boolean NOT NULL DEFAULT false,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+
+INSERT INTO modelos_turno (nome, hora_inicio, hora_fim, cor, eh_folga)
+SELECT * FROM (VALUES
+  ('Manhã',     '07:00'::time, '15:00'::time, '#0284c7', false),
+  ('Tarde',     '14:00'::time, '22:00'::time, '#d97706', false),
+  ('Noturno',   '22:00'::time, '06:00'::time, '#4f46e5', false),
+  ('Comercial', '08:00'::time, '17:00'::time, '#059669', false),
+  ('Folga',     '00:00'::time, '00:00'::time, '#64748b', true)
+) AS v(nome, hora_inicio, hora_fim, cor, eh_folga)
+WHERE NOT EXISTS (SELECT 1 FROM modelos_turno LIMIT 1);
+
+CREATE TABLE IF NOT EXISTS escala_turnos (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  funcionario_id uuid NOT NULL REFERENCES funcionarios(id) ON DELETE CASCADE,
+  modelo_turno_id uuid REFERENCES modelos_turno(id) ON DELETE SET NULL,
+  data date NOT NULL,
+  observacao text,
+  status text NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'confirmed', 'completed', 'swapped', 'absent')),
+  publicado boolean NOT NULL DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (funcionario_id, data)
+);
+
+CREATE TABLE IF NOT EXISTS trocas_turno (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  turno_origem_id uuid NOT NULL REFERENCES escala_turnos(id) ON DELETE CASCADE,
+  solicitante_id uuid NOT NULL REFERENCES funcionarios(id) ON DELETE CASCADE,
+  alvo_funcionario_id uuid NOT NULL REFERENCES funcionarios(id) ON DELETE CASCADE,
+  turno_alvo_id uuid REFERENCES escala_turnos(id) ON DELETE SET NULL,
+  motivo text,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  respondido_em timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS historico_escala (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  acao text NOT NULL,
+  descricao text NOT NULL,
+  funcionario_id uuid REFERENCES funcionarios(id) ON DELETE SET NULL,
+  data_referencia date,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE modelos_turno    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE escala_turnos    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trocas_turno     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE historico_escala ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Leitura pública - modelos_turno"    ON modelos_turno    FOR SELECT USING (true);
+CREATE POLICY "Leitura pública - escala_turnos"    ON escala_turnos    FOR SELECT USING (true);
+CREATE POLICY "Leitura pública - trocas_turno"     ON trocas_turno     FOR SELECT USING (true);
+CREATE POLICY "Leitura pública - historico_escala" ON historico_escala FOR SELECT USING (true);
+
+CREATE POLICY "Colaborador solicita troca" ON trocas_turno
+  FOR INSERT WITH CHECK (status = 'pending');
+
+CREATE POLICY "Registro de auditoria" ON historico_escala
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Colaborador registra justificativa em turno" ON escala_turnos
+  FOR UPDATE USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "Admin - modelos_turno" ON modelos_turno
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
+
+CREATE POLICY "Admin - escala_turnos" ON escala_turnos
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
+
+CREATE POLICY "Admin - trocas_turno" ON trocas_turno
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
+
+CREATE POLICY "Admin - historico_escala" ON historico_escala
+  FOR ALL USING ((select auth.role()) = 'authenticated')
+  WITH CHECK ((select auth.role()) = 'authenticated');
+
+CREATE INDEX IF NOT EXISTS idx_escala_turnos_data        ON escala_turnos(data);
+CREATE INDEX IF NOT EXISTS idx_escala_turnos_funcionario ON escala_turnos(funcionario_id, data);
+CREATE INDEX IF NOT EXISTS idx_trocas_turno_status       ON trocas_turno(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_historico_escala_created  ON historico_escala(created_at DESC);
+

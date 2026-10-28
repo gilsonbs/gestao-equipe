@@ -1,9 +1,20 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
 ---
-<AdminLayout title="Funcionários" active="funcionarios">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
-    <button class="btn btn-primary" id="btn-novo">+ Novo Funcionário</button>
+<AdminLayout title="Colaboradores & Funções" active="funcionarios">
+  <div class="func-toolbar">
+    <div style="display:flex;gap:var(--sp-2);flex-wrap:wrap;align-items:center">
+      <input class="form-control" id="busca-func" placeholder="🔍 Buscar por nome ou cargo..." style="width:16rem;min-height:2.4rem;font-size:.875rem" />
+      <select class="form-control" id="filtro-cargo" style="width:auto;min-height:2.4rem;font-size:.875rem">
+        <option value="">Todos os cargos</option>
+        <option value="Farmacêutico">Farmacêutico</option>
+        <option value="Balcão">Balcão</option>
+        <option value="Caixa">Caixa</option>
+        <option value="Suporte">Suporte</option>
+        <option value="Gerente">Gerente</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="btn-novo">+ Novo Colaborador</button>
   </div>
 
   <div class="card">
@@ -12,86 +23,221 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <table class="table-cards">
           <thead>
             <tr>
-              <th>Nome</th>
-              <th>Cargo</th>
+              <th>Colaborador</th>
+              <th>Cargo / Função</th>
+              <th>Jornada Contratual</th>
+              <th>Restrições / Indisponibilidade</th>
               <th>Aniversário</th>
               <th>Status</th>
               <th>Ações</th>
             </tr>
           </thead>
           <tbody id="tbody">
-            <tr><td colspan="5"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
+            <tr><td colspan="7"><div class="loading"><div class="spinner"></div> Carregando...</div></td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- Modal -->
+  <!-- Modal Cadastro/Edição -->
   <div class="modal-backdrop" id="modal" style="display:none">
-    <div class="modal">
+    <div class="modal" style="max-width:36rem">
       <div class="modal-header">
-        <span class="modal-title" id="modal-title">Novo Funcionário</span>
+        <span class="modal-title" id="modal-title">Novo Colaborador</span>
         <button class="modal-close" id="modal-close">✕</button>
       </div>
       <div class="modal-body">
-        <form id="form">
+        <form id="form" onsubmit="return false;">
           <input type="hidden" id="func-id" />
-          <div class="form-group">
-            <label class="form-label">Nome *</label>
-            <input class="form-control" id="nome" required placeholder="Nome completo" />
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Nome Completo *</label>
+              <input class="form-control" id="nome" required placeholder="Nome completo" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contato (WhatsApp / E-mail)</label>
+              <input class="form-control" id="contato" placeholder="(11) 99999-9999 ou email" />
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Cargo</label>
-            <input class="form-control" id="cargo" placeholder="Ex: Farmacêutico, Atendente..." />
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Cargo / Função *</label>
+              <input class="form-control" id="cargo" list="cargos-sugeridos" placeholder="Ex: Farmacêutico, Balcão, Caixa..." />
+              <datalist id="cargos-sugeridos">
+                <option value="Farmacêutico"></option>
+                <option value="Balcão"></option>
+                <option value="Caixa"></option>
+                <option value="Suporte"></option>
+                <option value="Gerente"></option>
+                <option value="Entregador"></option>
+              </datalist>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Data de Nascimento</label>
+              <input class="form-control" type="date" id="data_nascimento" />
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Data de Nascimento</label>
-            <input class="form-control" type="date" id="data_nascimento" />
+
+          <div class="grid-3">
+            <div class="form-group">
+              <label class="form-label">Carga Semanal (h)</label>
+              <input class="form-control" type="number" id="carga_horaria_semanal" value="44" min="10" max="60" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Limite Diário (h)</label>
+              <input class="form-control" type="number" id="limite_diario" value="8" min="4" max="12" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-control" id="ativo">
+                <option value="true">Ativo</option>
+                <option value="false">Inativo</option>
+              </select>
+            </div>
           </div>
+
           <div class="form-group">
-            <label class="form-label">Status</label>
-            <select class="form-control" id="ativo">
-              <option value="true">Ativo</option>
-              <option value="false">Inativo</option>
-            </select>
+            <label class="form-label">Restrições Individuais (Dias Indisponíveis)</label>
+            <div class="dias-restricao-grid">
+              <label class="restricao-cb-label"><input type="checkbox" class="indisp-cb" value="1" /> Seg</label>
+              <label class="restricao-cb-label"><input type="checkbox" class="indisp-cb" value="2" /> Ter</label>
+              <label class="restricao-cb-label"><input type="checkbox" class="indisp-cb" value="3" /> Qua</label>
+              <label class="restricao-cb-label"><input type="checkbox" class="indisp-cb" value="4" /> Qui</label>
+              <label class="restricao-cb-label"><input type="checkbox" class="indisp-cb" value="5" /> Sex</label>
+              <label class="restricao-cb-label"><input type="checkbox" class="indisp-cb" value="6" /> Sáb</label>
+              <label class="restricao-cb-label"><input type="checkbox" class="indisp-cb" value="0" /> Dom</label>
+            </div>
+            <div class="form-hint">Se alocado em um dia marcado acima, a Matriz de Escalas emitirá um alerta de conflito.</div>
           </div>
-          <div id="form-error" class="alert alert-danger" style="display:none"></div>
+
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Observações de Restrição / Escala</label>
+            <input class="form-control" id="observacoes_restricao" placeholder="Ex: Estuda à noite às terças e quintas; folga fixa domingo sim/não..." />
+          </div>
+
+          <div id="form-error" class="alert alert-danger" style="display:none;margin-top:var(--sp-3);margin-bottom:0"></div>
         </form>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
-        <button class="btn btn-primary" id="btn-save">Salvar</button>
+        <button class="btn btn-primary" id="btn-save">Salvar Colaborador</button>
       </div>
     </div>
   </div>
 </AdminLayout>
 
-<script>
-  import { supabase } from '../../lib/supabase';
+<style>
+  .func-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-4);
+  }
+  .dias-restricao-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--sp-2);
+  }
+  .restricao-cb-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: .78rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--slate-50);
+  }
+  .restricao-cb-label:has(input:checked) {
+    background: var(--danger-soft);
+    border-color: var(--danger-border);
+    color: var(--danger);
+  }
+  @media (max-width: 520px) {
+    .dias-restricao-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
 
-  type Func = { id: string; nome: string; cargo: string | null; data_nascimento: string | null; ativo: boolean };
+<script>
+  import { supabase, type Funcionario } from '../../lib/supabase';
+  import { DIAS_SEMANA_CURTO } from '../../lib/shifthub';
+
+  let allFuncs: Funcionario[] = [];
   let editingId: string | null = null;
 
+  function escapeHtml(s: string) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  }
+
   async function load() {
-    const { data } = await supabase.from('funcionarios').select('*').order('nome');
+    const { data, error } = await supabase.from('funcionarios').select('*').order('nome');
     const tbody = document.getElementById('tbody')!;
-    if (!data || data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="empty-icon">👤</div>Nenhum funcionário cadastrado</div></td></tr>';
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="7"><div class="alert alert-danger">${escapeHtml(error.message)}</div></td></tr>`;
       return;
     }
-    tbody.innerHTML = data.map((f: Func) => `
-      <tr>
-        <td data-label="Nome"><strong>${f.nome}</strong></td>
-        <td data-label="Cargo">${f.cargo ?? '—'}</td>
-        <td data-label="Aniversário">${f.data_nascimento ? formatDate(f.data_nascimento) : '—'}</td>
-        <td data-label="Status"><span class="badge ${f.ativo ? 'badge-success' : 'badge-danger'}">${f.ativo ? 'Ativo' : 'Inativo'}</span></td>
-        <td data-label="Ações" class="cell-actions">
-          <button class="btn btn-ghost btn-sm" onclick="openEdit('${f.id}')">✏️ Editar</button>
-          <button class="btn btn-danger btn-sm btn-icon" onclick="deleteFunc('${f.id}')" aria-label="Excluir">🗑️</button>
-        </td>
-      </tr>
-    `).join('');
+    allFuncs = (data ?? []) as Funcionario[];
+    renderTable();
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('tbody')!;
+    const q = (document.getElementById('busca-func') as HTMLInputElement).value.toLowerCase().trim();
+    const cargoFilter = (document.getElementById('filtro-cargo') as HTMLSelectElement).value.toLowerCase();
+
+    const filtered = allFuncs.filter(f => {
+      const matchQ = !q || f.nome.toLowerCase().includes(q) || (f.cargo ?? '').toLowerCase().includes(q);
+      const matchCargo = !cargoFilter || (f.cargo ?? '').toLowerCase().includes(cargoFilter);
+      return matchQ && matchCargo;
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">👤</div>Nenhum colaborador encontrado</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((f: Funcionario) => {
+      const cargaSemanal = f.carga_horaria_semanal ?? 44;
+      const limiteDia = f.limite_diario ?? 8;
+      const indisp = f.dias_indisponiveis ?? [];
+      const indispBadges = indisp.length > 0
+        ? indisp.map(d => `<span class="badge badge-danger" style="font-size:.68rem;padding:1px 6px">${DIAS_SEMANA_CURTO[d] ?? d}</span>`).join(' ')
+        : '<span style="color:var(--text-subtle);font-size:.8rem">Sem restrição</span>';
+
+      return `
+        <tr>
+          <td data-label="Colaborador">
+            <strong>${escapeHtml(f.nome)}</strong>
+            ${f.contato ? `<div style="font-size:.75rem;color:var(--text-muted)">${escapeHtml(f.contato)}</div>` : ''}
+          </td>
+          <td data-label="Cargo / Função">
+            ${f.cargo ? `<span class="badge badge-info">${escapeHtml(f.cargo)}</span>` : '—'}
+          </td>
+          <td data-label="Jornada Contratual">
+            <span style="font-weight:600">${cargaSemanal}h/sem</span>
+            <span style="font-size:.75rem;color:var(--text-muted)"> · máx ${limiteDia}h/dia</span>
+          </td>
+          <td data-label="Restrições">
+            <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">${indispBadges}</div>
+            ${f.observacoes_restricao ? `<div style="font-size:.73rem;color:var(--text-muted);margin-top:2px">${escapeHtml(f.observacoes_restricao)}</div>` : ''}
+          </td>
+          <td data-label="Aniversário">${f.data_nascimento ? formatDate(f.data_nascimento) : '—'}</td>
+          <td data-label="Status"><span class="badge ${f.ativo ? 'badge-success' : 'badge-neutral'}">${f.ativo ? 'Ativo' : 'Inativo'}</span></td>
+          <td data-label="Ações" class="cell-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openEdit('${f.id}')">✏️ Editar</button>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="deleteFunc('${f.id}')" aria-label="Excluir">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   }
 
   function formatDate(d: string) {
@@ -104,53 +250,97 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     document.getElementById('modal')!.style.display = 'none';
     (document.getElementById('form') as HTMLFormElement).reset();
     (document.getElementById('func-id') as HTMLInputElement).value = '';
+    (document.getElementById('carga_horaria_semanal') as HTMLInputElement).value = '44';
+    (document.getElementById('limite_diario') as HTMLInputElement).value = '8';
+    document.querySelectorAll<HTMLInputElement>('.indisp-cb').forEach(cb => { cb.checked = false; });
     document.getElementById('form-error')!.style.display = 'none';
     editingId = null;
   }
 
   document.getElementById('btn-novo')?.addEventListener('click', () => {
-    document.getElementById('modal-title')!.textContent = 'Novo Funcionário';
-    editingId = null;
+    closeModal();
+    document.getElementById('modal-title')!.textContent = 'Novo Colaborador';
     openModal();
   });
   document.getElementById('modal-close')?.addEventListener('click', closeModal);
   document.getElementById('btn-cancel')?.addEventListener('click', closeModal);
+  document.getElementById('busca-func')?.addEventListener('input', renderTable);
+  document.getElementById('filtro-cargo')?.addEventListener('change', renderTable);
 
   (window as any).openEdit = async (id: string) => {
     const { data } = await supabase.from('funcionarios').select('*').eq('id', id).single();
     if (!data) return;
     editingId = id;
-    document.getElementById('modal-title')!.textContent = 'Editar Funcionário';
-    (document.getElementById('nome') as HTMLInputElement).value = data.nome;
+    document.getElementById('modal-title')!.textContent = 'Editar Colaborador';
+    (document.getElementById('nome') as HTMLInputElement).value = data.nome ?? '';
+    (document.getElementById('contato') as HTMLInputElement).value = data.contato ?? '';
     (document.getElementById('cargo') as HTMLInputElement).value = data.cargo ?? '';
     (document.getElementById('data_nascimento') as HTMLInputElement).value = data.data_nascimento ?? '';
-    (document.getElementById('ativo') as HTMLSelectElement).value = String(data.ativo);
+    (document.getElementById('carga_horaria_semanal') as HTMLInputElement).value = String(data.carga_horaria_semanal ?? 44);
+    (document.getElementById('limite_diario') as HTMLInputElement).value = String(data.limite_diario ?? 8);
+    (document.getElementById('observacoes_restricao') as HTMLInputElement).value = data.observacoes_restricao ?? '';
+    (document.getElementById('ativo') as HTMLSelectElement).value = String(data.ativo ?? true);
+
+    const indispSet = new Set<number>(data.dias_indisponiveis ?? []);
+    document.querySelectorAll<HTMLInputElement>('.indisp-cb').forEach(cb => {
+      cb.checked = indispSet.has(parseInt(cb.value));
+    });
     openModal();
   };
 
   (window as any).deleteFunc = async (id: string) => {
-    if (!confirm('Excluir este funcionário? Metas, vendas e folgas dele também serão removidas.')) return;
+    if (!confirm('Excluir este colaborador? Escalas, metas, vendas e folgas vinculadas também serão removidas.')) return;
     const { error } = await supabase.from('funcionarios').delete().eq('id', id);
-    if (error) { alert('Erro ao excluir o funcionário: ' + error.message); return; }
+    if (error) { alert('Erro ao excluir o colaborador: ' + error.message); return; }
     load();
   };
 
   document.getElementById('btn-save')?.addEventListener('click', async () => {
     const nome = (document.getElementById('nome') as HTMLInputElement).value.trim();
+    const contato = (document.getElementById('contato') as HTMLInputElement).value.trim() || null;
     const cargo = (document.getElementById('cargo') as HTMLInputElement).value.trim() || null;
     const data_nascimento = (document.getElementById('data_nascimento') as HTMLInputElement).value || null;
+    const carga_horaria_semanal = parseInt((document.getElementById('carga_horaria_semanal') as HTMLInputElement).value) || 44;
+    const limite_diario = parseInt((document.getElementById('limite_diario') as HTMLInputElement).value) || 8;
+    const observacoes_restricao = (document.getElementById('observacoes_restricao') as HTMLInputElement).value.trim() || null;
+    const dias_indisponiveis = Array.from(document.querySelectorAll<HTMLInputElement>('.indisp-cb:checked'))
+      .map(cb => parseInt(cb.value));
     const ativo = (document.getElementById('ativo') as HTMLSelectElement).value === 'true';
     const errorDiv = document.getElementById('form-error')!;
 
     if (!nome) { errorDiv.textContent = 'Nome é obrigatório.'; errorDiv.style.display = 'block'; return; }
     errorDiv.style.display = 'none';
 
-    const { error } = editingId
-      ? await supabase.from('funcionarios').update({ nome, cargo, data_nascimento, ativo }).eq('id', editingId)
-      : await supabase.from('funcionarios').insert({ nome, cargo, data_nascimento, ativo });
+    const payloadFull = {
+      nome,
+      contato,
+      cargo,
+      data_nascimento,
+      carga_horaria_semanal,
+      limite_diario,
+      dias_indisponiveis,
+      observacoes_restricao,
+      ativo,
+    };
+
+    let { error } = editingId
+      ? await supabase.from('funcionarios').update(payloadFull).eq('id', editingId)
+      : await supabase.from('funcionarios').insert(payloadFull);
+
+    // Fallback caso a migration 011 ainda não tenha sido rodada no Supabase
+    if (error && error.message?.includes('column')) {
+      const payloadBasic = { nome, cargo, data_nascimento, ativo };
+      const retry = editingId
+        ? await supabase.from('funcionarios').update(payloadBasic).eq('id', editingId)
+        : await supabase.from('funcionarios').insert(payloadBasic);
+      error = retry.error;
+      if (!error) {
+        alert('Colaborador salvo! Nota: Para salvar carga horária e restrições de turno, execute migrations/011-shifthub-turnos.sql no SQL Editor do Supabase.');
+      }
+    }
 
     if (error) {
-      errorDiv.textContent = 'Erro ao salvar o funcionário: ' + error.message;
+      errorDiv.textContent = 'Erro ao salvar o colaborador: ' + error.message;
       errorDiv.style.display = 'block';
       return;
     }
@@ -160,4 +350,3 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
   load();
 </script>
-
