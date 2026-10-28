@@ -373,6 +373,31 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
     funcionarios = (funcRes.data ?? []) as Funcionario[];
     modelos = (modRes.data ?? []) as ModeloTurno[];
+
+    // Sincronizar automaticamente os modelos padrão solicitados (Manhã 07-15, Tarde 15-23, Farmacêutica 08-17)
+    const tardeAntiga = modelos.find(m => m.nome === 'Tarde' && m.hora_inicio.startsWith('14:00'));
+    const comercialAntigo = modelos.find(m => m.nome === 'Comercial');
+    const noturnoPadrao = modelos.find(m => m.nome === 'Noturno' && m.hora_inicio.startsWith('22:00'));
+
+    if (tardeAntiga || comercialAntigo || noturnoPadrao) {
+      if (tardeAntiga) {
+        await supabase.from('modelos_turno').update({ hora_inicio: '15:00', hora_fim: '23:00' }).eq('id', tardeAntiga.id);
+      }
+      if (comercialAntigo) {
+        await supabase.from('modelos_turno').update({ nome: 'Farmacêutica', hora_inicio: '08:00', hora_fim: '17:00' }).eq('id', comercialAntigo.id);
+      }
+      if (noturnoPadrao) {
+        await supabase.from('modelos_turno').delete().eq('id', noturnoPadrao.id);
+      }
+      const { data: refreshedMods } = await supabase
+        .from('modelos_turno')
+        .select('*')
+        .eq('ativo', true)
+        .order('eh_folga')
+        .order('hora_inicio');
+      if (refreshedMods) modelos = refreshedMods as ModeloTurno[];
+    }
+
     modelosMap = new Map(modelos.map(m => [m.id, m]));
     turnosSemana = (turnosRes.data ?? []) as EscalaTurno[];
 

@@ -30,13 +30,18 @@ CREATE TABLE IF NOT EXISTS public.modelos_turno (
 -- Semear turnos padrão caso a tabela esteja vazia
 INSERT INTO public.modelos_turno (nome, hora_inicio, hora_fim, cor, eh_folga)
 SELECT * FROM (VALUES
-  ('Manhã',     '07:00'::time, '15:00'::time, '#0284c7', false),
-  ('Tarde',     '14:00'::time, '22:00'::time, '#d97706', false),
-  ('Noturno',   '22:00'::time, '06:00'::time, '#4f46e5', false),
-  ('Comercial', '08:00'::time, '17:00'::time, '#059669', false),
-  ('Folga',     '00:00'::time, '00:00'::time, '#64748b', true)
+  ('Manhã',        '07:00'::time, '15:00'::time, '#0284c7', false),
+  ('Tarde',        '15:00'::time, '23:00'::time, '#d97706', false),
+  ('Farmacêutica', '08:00'::time, '17:00'::time, '#059669', false),
+  ('Folga',        '00:00'::time, '00:00'::time, '#64748b', true)
 ) AS v(nome, hora_inicio, hora_fim, cor, eh_folga)
 WHERE NOT EXISTS (SELECT 1 FROM public.modelos_turno LIMIT 1);
+
+-- Atualizar turnos caso já tenham sido criados com os horários anteriores
+UPDATE public.modelos_turno SET hora_inicio = '07:00', hora_fim = '15:00' WHERE nome = 'Manhã';
+UPDATE public.modelos_turno SET hora_inicio = '15:00', hora_fim = '23:00' WHERE nome = 'Tarde';
+UPDATE public.modelos_turno SET nome = 'Farmacêutica', hora_inicio = '08:00', hora_fim = '17:00' WHERE nome IN ('Comercial', 'Farmacêutica');
+DELETE FROM public.modelos_turno WHERE nome = 'Noturno' AND id NOT IN (SELECT DISTINCT modelo_turno_id FROM public.escala_turnos WHERE modelo_turno_id IS NOT NULL);
 
 -- 3. Escala Realizada / Alocada na Matriz Semanal (scheduled_shifts)
 CREATE TABLE IF NOT EXISTS public.escala_turnos (

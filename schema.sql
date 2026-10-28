@@ -312,11 +312,10 @@ CREATE TABLE IF NOT EXISTS modelos_turno (
 
 INSERT INTO modelos_turno (nome, hora_inicio, hora_fim, cor, eh_folga)
 SELECT * FROM (VALUES
-  ('Manhã',     '07:00'::time, '15:00'::time, '#0284c7', false),
-  ('Tarde',     '14:00'::time, '22:00'::time, '#d97706', false),
-  ('Noturno',   '22:00'::time, '06:00'::time, '#4f46e5', false),
-  ('Comercial', '08:00'::time, '17:00'::time, '#059669', false),
-  ('Folga',     '00:00'::time, '00:00'::time, '#64748b', true)
+  ('Manhã',        '07:00'::time, '15:00'::time, '#0284c7', false),
+  ('Tarde',        '15:00'::time, '23:00'::time, '#d97706', false),
+  ('Farmacêutica', '08:00'::time, '17:00'::time, '#059669', false),
+  ('Folga',        '00:00'::time, '00:00'::time, '#64748b', true)
 ) AS v(nome, hora_inicio, hora_fim, cor, eh_folga)
 WHERE NOT EXISTS (SELECT 1 FROM modelos_turno LIMIT 1);
 
