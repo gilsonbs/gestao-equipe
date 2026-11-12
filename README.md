@@ -183,6 +183,25 @@ src/
 └── styles/global.css           Design system: variáveis, botões, cards, tabelas
 ```
 
+## Exportar ShiftHub para o calendário
+
+Execute `migrations/012-shifthub-calendario.sql` no SQL Editor do Supabase após
+a migration 011. Não execute o schema novamente.
+
+No ShiftHub, selecione uma semana e clique em **Exportar para calendário**.
+A ação inclui toda a equipe, mesmo com filtro de cargo, e envia os turnos
+publicados de funcionários ativos: modelos de folga viram `folga`; os demais
+viram `horario`, com início, fim e observações. Faltas e turnos sem modelo
+não são exportados. Turnos noturnos indicam término no dia seguinte.
+
+Os registros aparecem em **Folgas & Férias** e no calendário do dashboard.
+Repetir a exportação atualiza a semana sem duplicar registros. Férias e
+lançamentos manuais sobrepostos são preservados e os conflitos são informados.
+Ao editar um registro exportado em Folgas & Férias, ele passa a ser manual.
+Após alterar a escala ou aprovar trocas, exporte novamente para atualizar o
+calendário. Excluir um turno remove seu registro vinculado no calendário.
+A operação exige login e ocorre em uma única transação.
+
 ## Importar produtos por CSV
 
 A tela **Top Produtos** aceita importação de planilha. O arquivo precisa ter
