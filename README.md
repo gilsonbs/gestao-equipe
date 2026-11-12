@@ -216,3 +216,13 @@ Vírgula e ponto e vírgula funcionam como separador. O arquivo é lido como
 UTF-8 — se os acentos aparecerem quebrados, salve a planilha nesse formato
 antes de importar.
 
+
+### Selecionar dias específicos para o calendário
+
+Execute a migração 014 após a 013. Na grade ou na edição do turno, use
+**Exibir no calendário** e depois **Exportar seleção para calendário**.
+Folgas ficam marcadas por padrão. Horários de trabalho só são incluídos
+quando marcados explicitamente, com início e fim, sem identificação ShiftHub.
+Desmarcar e reexportar remove apenas o lançamento vinculado. Registros
+manuais e férias continuam preservados. A seleção é salva por pessoa e data.
+
