@@ -185,22 +185,22 @@ src/
 
 ## Exportar ShiftHub para o calendário
 
-Execute `migrations/012-shifthub-calendario.sql` no SQL Editor do Supabase após
-a migration 011. Não execute o schema novamente.
+Execute as migrações 012 e 013 no SQL Editor do Supabase, após a 011.
+A 013 remove apenas os horários vinculados à exportação anterior, limpa as
+observações das folgas exportadas e restringe os dados do ShiftHub a usuários
+autenticados. Férias, folgas e horários manuais são preservados.
 
-No ShiftHub, selecione uma semana e clique em **Exportar para calendário**.
-A ação inclui toda a equipe, mesmo com filtro de cargo, e envia os turnos
-publicados de funcionários ativos: modelos de folga viram `folga`; os demais
-viram `horario`, com início, fim e observações. Faltas e turnos sem modelo
-não são exportados. Turnos noturnos indicam término no dia seguinte.
+No ShiftHub (somente no admin), selecione a semana e clique em
+**Exportar folgas para calendário**. Apenas folgas publicadas de funcionários
+ativos, sem falta e sem conflito com registros manuais, serão exportadas.
+A grade sinaliza **Vai para o calendário** ou **Registro manual preservado**.
+O filtro de cargo não limita a exportação: ela inclui toda a equipe.
 
-Os registros aparecem em **Folgas & Férias** e no calendário do dashboard.
-Repetir a exportação atualiza a semana sem duplicar registros. Férias e
-lançamentos manuais sobrepostos são preservados e os conflitos são informados.
-Ao editar um registro exportado em Folgas & Férias, ele passa a ser manual.
-Após alterar a escala ou aprovar trocas, exporte novamente para atualizar o
-calendário. Excluir um turno remove seu registro vinculado no calendário.
-A operação exige login e ocorre em uma única transação.
+O calendário público continua exibindo folgas e férias, sem identificação
+ShiftHub. A operação pode ser repetida para atualizar a semana sem duplicar.
+Ao editar uma folga exportada no calendário administrativo, ela passa a ser
+manual e é preservada nas próximas exportações. Após alterações na escala ou
+trocas, exporte novamente. Excluir um turno remove a folga vinculada.
 
 ## Importar produtos por CSV
 
@@ -215,3 +215,4 @@ Dipirona 500mg,Dipirona Monoidratada,Analgésico,320,4,2025
 Vírgula e ponto e vírgula funcionam como separador. O arquivo é lido como
 UTF-8 — se os acentos aparecerem quebrados, salve a planilha nesse formato
 antes de importar.
+
