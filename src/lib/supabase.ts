@@ -33,6 +33,7 @@ export type ModeloTurno = {
 export type StatusTurno = 'scheduled' | 'confirmed' | 'completed' | 'swapped' | 'absent';
 
 export type EscalaTurno = {
+  exibir_calendario?: boolean | null;
   id: string;
   funcionario_id: string;
   modelo_turno_id: string | null;
@@ -170,5 +171,6 @@ export type ProdutoTop = {
   mes: number | null;
   ano: number | null;
 };
+
 
 
