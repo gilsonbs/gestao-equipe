@@ -26,9 +26,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       <button class="btn btn-ghost btn-sm" id="btn-modelos">⚙️ Modelos de Turno</button>
       <button class="btn btn-ghost btn-sm" id="btn-copy-prev" title="Copiar alocação da semana anterior">📋 Copiar Anterior</button>
       <button class="btn btn-secondary btn-sm" id="btn-novo-turno">+ Novo Turno</button>
+      <button class="btn btn-secondary btn-sm" id="btn-exportar-calendario">📅 Exportar para calendário</button>
       <button class="btn btn-primary btn-sm" id="btn-publicar">📢 Publicar Escala</button>
     </div>
   </div>
+
+  <div id="exportacao-status" role="status" aria-live="polite" style="display:none"></div>
 
   <!-- Painel de Validações Automáticas (Interjornada 11h, Carga Semanal, Restrições e Subdimensionamento) -->
   <div id="validations-container"></div>
@@ -960,6 +963,43 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     }
     await logAuditoria('alocacao', `Copiados ${toInsert.length} turnos da semana anterior para ${formatWeekRangeLabel(weekDays)}`);
     await initShiftHub();
+  });
+
+  // Exporta a semana inteira, independentemente do filtro visual de cargo.
+  document.getElementById('btn-exportar-calendario')?.addEventListener('click', async () => {
+    const inicio = weekDays[0].iso;
+    const fim = weekDays[6].iso;
+    const periodo = formatWeekRangeLabel(weekDays);
+    if (!confirm(`Exportar folgas e horários de toda a equipe para o calendário (${periodo})?\n\nSomente turnos publicados serão incluídos. A exportação anterior desta semana será atualizada. Férias e registros manuais serão preservados; dias com conflito serão ignorados.`)) return;
+
+    const btn = document.getElementById('btn-exportar-calendario') as HTMLButtonElement;
+    const status = document.getElementById('exportacao-status')!;
+    btn.disabled = true;
+    btn.textContent = 'Exportando...';
+    status.style.display = 'block';
+    status.className = 'alert alert-info';
+    status.textContent = `Exportando a semana ${periodo}...`;
+    try {
+      const { data, error } = await supabase.rpc('exportar_escala_calendario', { inicio, fim });
+      if (error) {
+        if (error.code === 'PGRST202' || error.code === '42883') {
+          throw new Error('Para habilitar a exportação, execute migrations/012-shifthub-calendario.sql no SQL Editor do Supabase.');
+        }
+        throw new Error(error.message);
+      }
+      status.className = data.conflitos > 0 ? 'alert alert-warning' : 'alert alert-success';
+      status.textContent = `Semana ${periodo}: ${data.exportados} registro(s) exportado(s). ` +
+        (data.conflitos > 0
+          ? `${data.conflitos} dia(s) ignorado(s) por conflito com registros existentes. Confira em Folgas & Férias.`
+          : 'Confira os horários e as folgas em Folgas & Férias e no calendário do dashboard.');
+      await loadAuditLog();
+    } catch (error) {
+      status.className = 'alert alert-danger';
+      status.textContent = 'Erro ao exportar: ' + (error instanceof Error ? error.message : 'Tente novamente.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📅 Exportar para calendário';
+    }
   });
 
   // Publicar Escala da Semana

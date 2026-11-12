@@ -135,6 +135,7 @@ export type VendaLoja = {
 
 export type Folga = {
   id: string;
+  escala_turno_id?: string | null;
   funcionario_id: string;
   data_inicio: string;
   data_fim: string;

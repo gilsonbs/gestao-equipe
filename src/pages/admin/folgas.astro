@@ -368,7 +368,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       if (editingId) {
         const dia = dias[0];
         const { error } = await supabase.from('folgas')
-          .update({ funcionario_id, tipo, data_inicio: dia, data_fim: dia, observacao })
+          .update({ funcionario_id, tipo, data_inicio: dia, data_fim: dia, observacao, escala_turno_id: null })
           .eq('id', editingId);
         if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
       } else {
@@ -390,7 +390,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       }
       errorDiv.style.display = 'none';
       const { error } = editingId
-        ? await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim, observacao: null }).eq('id', editingId)
+        ? await supabase.from('folgas').update({ funcionario_id, tipo, data_inicio, data_fim, observacao: null, escala_turno_id: null }).eq('id', editingId)
         : await supabase.from('folgas').insert({ funcionario_id, tipo, data_inicio, data_fim });
       if (error) { errorDiv.textContent = 'Erro ao salvar: ' + error.message; errorDiv.style.display = 'block'; return; }
     }
