@@ -236,7 +236,7 @@ tbody tr:hover td { background: var(--slate-50); }
 .badge-danger  { background: var(--danger-soft);  color: var(--danger);  border-color: var(--danger-border); }
 .badge-info    { background: var(--info-soft);    color: var(--info);    border-color: var(--info-border); }
 .badge-neutral  { background: var(--slate-100);    color: var(--slate-600); border-color: var(--slate-200); }
-.badge-horario  { background: #0f172a; color: #ffffff; border-color: #0f172a; }
+.badge-horario  { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
 
 /* ---------- Barra de progresso ---------- */
 .progress {
@@ -552,7 +552,7 @@ tbody tr:hover td { background: var(--slate-50); }
 }
 .cal-nome.folga   { background: var(--warning-soft); color: var(--warning); border-left: 3px solid var(--warning); }
 .cal-nome.ferias  { background: var(--info-soft);    color: var(--info); border-left: 3px solid var(--info); }
-.cal-nome.horario { background: #0f172a; color: #ffffff; border-left: 3px solid #000000; }
+.cal-nome.horario { background: #ede9fe; color: #5b21b6; border-left: 3px solid #8b5cf6; }
 .cal-nome-texto   { font-weight: 600; font-size: .68rem; }
 .cal-nome-tipo    { font-weight: 500; font-size: .62rem; opacity: .9; }
 .cal-nome-obs     { font-size: .62rem; font-style: italic; opacity: .95; word-break: break-word; }
@@ -625,7 +625,7 @@ tbody tr:hover td { background: var(--slate-50); }
 }
 .cal-ponto.folga   { background: var(--warning); }
 .cal-ponto.ferias  { background: var(--info); }
-.cal-ponto.horario { background: #0f172a; }
+.cal-ponto.horario { background: #8b5cf6; }
 
 .cal-mais { font-size: .55rem; font-weight: 600; color: var(--text-muted); line-height: 1; }
 
@@ -1344,4 +1344,5 @@ tbody tr:hover td { background: var(--slate-50); }
     transition-duration: .01ms !important;
   }
 }
+
 

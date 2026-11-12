@@ -26,12 +26,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       <button class="btn btn-ghost btn-sm" id="btn-modelos">⚙️ Modelos de Turno</button>
       <button class="btn btn-ghost btn-sm" id="btn-copy-prev" title="Copiar alocação da semana anterior">📋 Copiar Anterior</button>
       <button class="btn btn-secondary btn-sm" id="btn-novo-turno">+ Novo Turno</button>
-      <button class="btn btn-secondary btn-sm" id="btn-exportar-calendario">📅 Exportar para calendário</button>
+      <button class="btn btn-secondary btn-sm" id="btn-exportar-calendario">📅 Exportar folgas para calendário</button>
       <button class="btn btn-primary btn-sm" id="btn-publicar">📢 Publicar Escala</button>
     </div>
   </div>
 
   <div id="exportacao-status" role="status" aria-live="polite" style="display:none"></div>
+
+  <p style="color:var(--text-muted);font-size:.85rem">📅 A marcação “Vai para o calendário” identifica as folgas publicadas que serão exportadas. Horários de trabalho ficam apenas neste painel.</p>
 
   <!-- Painel de Validações Automáticas (Interjornada 11h, Carga Semanal, Restrições e Subdimensionamento) -->
   <div id="validations-container"></div>
@@ -336,6 +338,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   let modelos: ModeloTurno[] = [];
   let modelosMap = new Map<string, ModeloTurno>();
   let turnosSemana: EscalaTurno[] = [];
+  let registrosCalendario: { funcionario_id: string; data_inicio: string; data_fim: string; escala_turno_id: string | null }[] = [];
+  let calendarioDisponivel = false;
   let selectedPaletteId = ''; // '' = abrir modal; '<modelo_id>' = pintar com 1 clique
 
   function escapeHtml(s: string) {
@@ -362,10 +366,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     const queryStart = toISODate(prevSundayDate);
     const queryEnd = weekDays[6].iso;
 
-    const [funcRes, modRes, turnosRes] = await Promise.all([
+    const [funcRes, modRes, turnosRes, calendarioRes] = await Promise.all([
       supabase.from('funcionarios').select('*').eq('ativo', true).order('nome'),
       supabase.from('modelos_turno').select('*').eq('ativo', true).order('eh_folga').order('hora_inicio'),
       supabase.from('escala_turnos').select('*, modelos_turno(*)').gte('data', queryStart).lte('data', queryEnd),
+      supabase.from('folgas').select('funcionario_id,data_inicio,data_fim,escala_turno_id').lte('data_inicio', queryEnd).gte('data_fim', weekDays[0].iso),
     ]);
 
     if (modRes.error || turnosRes.error) {
@@ -404,6 +409,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     modelosMap = new Map(modelos.map(m => [m.id, m]));
     turnosSemana = (turnosRes.data ?? []) as EscalaTurno[];
 
+    registrosCalendario = calendarioRes.data ?? [];
+    calendarioDisponivel = !calendarioRes.error;
     populateCargoFilter();
     renderPalette();
     renderMatrixAndValidations();
@@ -512,6 +519,15 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         const cor = mod?.cor ?? '#64748b';
         const ehFolga = Boolean(mod?.eh_folga);
         const nomeTurno = mod?.nome ?? 'Turno';
+        const folgaPublicada = ehFolga && turno.publicado && turno.status !== 'absent';
+        const conflitoCalendario = registrosCalendario.some(f =>
+          f.funcionario_id === func.id && !f.escala_turno_id &&
+          f.data_inicio <= turno.data && f.data_fim >= turno.data);
+        const marcacaoCalendario = folgaPublicada
+          ? !calendarioDisponivel ? '⚠ Conferir calendário'
+            : conflitoCalendario ? '⚠ Registro manual preservado' : '📅 Vai para o calendário'
+          : '';
+
         const horarioTxt = ehFolga
           ? 'FOLGA'
           : mod
@@ -554,6 +570,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                 ${!turno.publicado ? `<span title="Rascunho não publicado" style="font-size:.62rem;color:var(--warning)">● Rascunho</span>` : ''}
               </div>
               <div class="shifthub-slot-time">${escapeHtml(horarioTxt)}</div>
+              ${marcacaoCalendario ? `<span class="badge ${conflitoCalendario || !calendarioDisponivel ? 'badge-warning' : 'badge-success'}" style="font-size:.65rem;white-space:normal">${marcacaoCalendario}</span>` : ''}
               ${turno.observacao ? `<div style="font-size:.64rem;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(turno.observacao)}">💬 ${escapeHtml(turno.observacao)}</div>` : ''}
             </div>
             <div class="shifthub-slot-bottom">
@@ -970,7 +987,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     const inicio = weekDays[0].iso;
     const fim = weekDays[6].iso;
     const periodo = formatWeekRangeLabel(weekDays);
-    if (!confirm(`Exportar folgas e horários de toda a equipe para o calendário (${periodo})?\n\nSomente turnos publicados serão incluídos. A exportação anterior desta semana será atualizada. Férias e registros manuais serão preservados; dias com conflito serão ignorados.`)) return;
+    if (!confirm(`Exportar somente as folgas de toda a equipe para o calendário (${periodo})?\n\nSomente folgas publicadas serão incluídas. Horários de trabalho não serão exportados. A exportação anterior desta semana será atualizada. Férias e registros manuais serão preservados; dias com conflito serão ignorados.`)) return;
 
     const btn = document.getElementById('btn-exportar-calendario') as HTMLButtonElement;
     const status = document.getElementById('exportacao-status')!;
@@ -980,10 +997,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     status.className = 'alert alert-info';
     status.textContent = `Exportando a semana ${periodo}...`;
     try {
-      const { data, error } = await supabase.rpc('exportar_escala_calendario', { inicio, fim });
+      const { data, error } = await supabase.rpc('exportar_folgas_calendario', { inicio, fim });
       if (error) {
         if (error.code === 'PGRST202' || error.code === '42883') {
-          throw new Error('Para habilitar a exportação, execute migrations/012-shifthub-calendario.sql no SQL Editor do Supabase.');
+          throw new Error('Para habilitar a exportação, execute migrations/013-calendario-somente-folgas.sql no SQL Editor do Supabase.');
         }
         throw new Error(error.message);
       }
@@ -991,14 +1008,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       status.textContent = `Semana ${periodo}: ${data.exportados} registro(s) exportado(s). ` +
         (data.conflitos > 0
           ? `${data.conflitos} dia(s) ignorado(s) por conflito com registros existentes. Confira em Folgas & Férias.`
-          : 'Confira os horários e as folgas em Folgas & Férias e no calendário do dashboard.');
+          : 'Confira as folgas em Folgas & Férias e no calendário do dashboard.');
       await loadAuditLog();
     } catch (error) {
       status.className = 'alert alert-danger';
       status.textContent = 'Erro ao exportar: ' + (error instanceof Error ? error.message : 'Tente novamente.');
     } finally {
       btn.disabled = false;
-      btn.textContent = '📅 Exportar para calendário';
+      btn.textContent = '📅 Exportar folgas para calendário';
     }
   });
 
@@ -1531,3 +1548,4 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   initShiftHub();
   loadLista();
 </script>
+
